@@ -2,7 +2,7 @@
 
 Open source medical image viewer that runs entirely in your browser. View CT scans, MRI, and X-rays without uploading files, creating an account, or installing anything.
 
-### **[Live at open-rad.vercel.app](https://open-rad.vercel.app/)**
+### **[Live at openrad.vercel.app](https://openrad.vercel.app/)**
 
 ## Features
 

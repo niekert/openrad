@@ -1,0 +1,273 @@
+"use client";
+
+import { useEffect, useRef, useCallback, useState } from "react";
+import type { Series } from "@/lib/dicom/types";
+import type { WindowPreset } from "@/lib/cornerstone/presets";
+import type { ToolName } from "./Toolbar";
+
+interface DicomViewportProps {
+  series: Series;
+  activeTool: ToolName;
+  activePreset: WindowPreset | null;
+  onSliceChange: (current: number, total: number) => void;
+  onWindowChange: (ww: number, wc: number) => void;
+  onImageInfo: (width: number, height: number) => void;
+}
+
+export default function DicomViewport({
+  series,
+  activeTool,
+  activePreset,
+  onSliceChange,
+  onWindowChange,
+  onImageInfo,
+}: DicomViewportProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const viewportIdRef = useRef<string>("ct-viewport");
+  const renderingEngineRef = useRef<unknown>(null);
+  const [loading, setLoading] = useState(true);
+  const currentIndexRef = useRef(0);
+
+  // Store callbacks in refs to avoid re-running effects
+  const onSliceChangeRef = useRef(onSliceChange);
+  const onWindowChangeRef = useRef(onWindowChange);
+  const onImageInfoRef = useRef(onImageInfo);
+  onSliceChangeRef.current = onSliceChange;
+  onWindowChangeRef.current = onWindowChange;
+  onImageInfoRef.current = onImageInfo;
+
+  const setupViewport = useCallback(async () => {
+    if (!containerRef.current) return;
+    setLoading(true);
+
+    const cs = await import("@cornerstonejs/core");
+    const csTools = await import("@cornerstonejs/tools");
+    const { initCornerstone, createToolGroup, TOOL_GROUP_ID } = await import(
+      "@/lib/cornerstone/init"
+    );
+    const { getImageId } = await import(
+      "@/lib/cornerstone/custom-image-loader"
+    );
+
+    await initCornerstone();
+
+    const imageIds = series.instances.map((inst) => getImageId(inst.fileKey));
+    console.log(`[OpenCT] Setting up viewport with ${imageIds.length} images`);
+    console.log(`[OpenCT] First imageId: ${imageIds[0]}`);
+    if (imageIds.length === 0) return;
+
+    // Clean up previous engine
+    if (renderingEngineRef.current) {
+      try {
+        (renderingEngineRef.current as { destroy: () => void }).destroy();
+      } catch {
+        // ignore
+      }
+    }
+
+    const engineId = "ctEngine";
+    const renderingEngine = new cs.RenderingEngine(engineId);
+    renderingEngineRef.current = renderingEngine;
+
+    const viewportInput = {
+      viewportId: viewportIdRef.current,
+      type: cs.Enums.ViewportType.STACK,
+      element: containerRef.current,
+    };
+
+    renderingEngine.enableElement(viewportInput);
+
+    const viewport = renderingEngine.getViewport(
+      viewportIdRef.current
+    ) 
+
+    // Set up tool group
+    const toolGroup = createToolGroup();
+    if (toolGroup) {
+      toolGroup.addViewport(viewportIdRef.current, engineId);
+    }
+
+    console.log("[OpenCT] Calling viewport.setStack...");
+    try {
+      await viewport.setStack(imageIds, 0);
+      console.log("[OpenCT] setStack completed successfully");
+    } catch (err) {
+      console.error("[OpenCT] setStack failed:", err);
+    }
+    currentIndexRef.current = 0;
+
+    // Get image info
+    const imageData = viewport.getImageData();
+    console.log("[OpenCT] imageData:", imageData);
+    if (imageData?.dimensions) {
+      onImageInfoRef.current(imageData.dimensions[0], imageData.dimensions[1]);
+    }
+
+    onSliceChangeRef.current(1, imageIds.length);
+
+    // Listen for errors
+    const element = containerRef.current;
+    element.addEventListener(cs.Enums.Events.IMAGE_LOAD_ERROR, (e: Event) => {
+      console.error("[OpenCT] IMAGE_LOAD_ERROR:", (e as CustomEvent).detail);
+    });
+
+    // Listen for image rendered to update WW/WC
+    const handleImageRendered = () => {
+      const props = viewport.getProperties();
+      if (props.voiRange) {
+        const ww = props.voiRange.upper - props.voiRange.lower;
+        const wc = (props.voiRange.upper + props.voiRange.lower) / 2;
+        onWindowChangeRef.current(ww, wc);
+      }
+    };
+
+    element.addEventListener(
+      cs.Enums.Events.IMAGE_RENDERED,
+      handleImageRendered
+    );
+
+    // Mouse wheel scrolling — query Cornerstone for actual index
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 1 : -1;
+      const vp = viewport as unknown as {
+        scroll: (delta: number) => void;
+        getCurrentImageIdIndex: () => number;
+        getImageIds: () => string[];
+      };
+      const before = vp.getCurrentImageIdIndex();
+      vp.scroll(delta);
+      const after = vp.getCurrentImageIdIndex();
+      console.log(`[OpenCT wheel] deltaY=${e.deltaY} delta=${delta} before=${before} after=${after}`);
+      currentIndexRef.current = after;
+      onSliceChangeRef.current(after + 1, imageIds.length);
+    };
+
+    element.addEventListener("wheel", handleWheel, { passive: false });
+
+    // Preload all images in background for smooth scrolling
+    const preloadAborted = { current: false };
+    const preloadStack = async () => {
+      const batchSize = 20;
+      for (let i = 0; i < imageIds.length; i += batchSize) {
+        if (preloadAborted.current) break;
+        const batch = imageIds.slice(i, Math.min(i + batchSize, imageIds.length));
+        await Promise.allSettled(
+          batch.map((id) =>
+            (cs.imageLoader as unknown as { loadAndCacheImage: (id: string) => Promise<unknown> })
+              .loadAndCacheImage(id)
+          )
+        );
+        // Yield to keep UI responsive
+        await new Promise((r) => setTimeout(r, 0));
+      }
+      if (!preloadAborted.current) {
+        console.log(`[OpenCT] Preloaded all ${imageIds.length} images`);
+      }
+    };
+    preloadStack();
+
+    setLoading(false);
+
+    return () => {
+      preloadAborted.current = true;
+      element.removeEventListener(
+        cs.Enums.Events.IMAGE_RENDERED,
+        handleImageRendered
+      );
+      element.removeEventListener("wheel", handleWheel);
+    };
+  }, [series]);
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined;
+    setupViewport().then((fn) => {
+      cleanup = fn;
+    });
+
+    return () => {
+      cleanup?.();
+      if (renderingEngineRef.current) {
+        try {
+          (renderingEngineRef.current as { destroy: () => void }).destroy();
+        } catch {
+          // ignore
+        }
+        renderingEngineRef.current = null;
+      }
+    };
+  }, [setupViewport]);
+
+  // Update active tool
+  useEffect(() => {
+    const updateTool = async () => {
+      const csTools = await import("@cornerstonejs/tools");
+      const { TOOL_GROUP_ID } = await import("@/lib/cornerstone/init");
+      const toolGroup = csTools.ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      if (!toolGroup) return;
+
+      const toolNames = [
+        "WindowLevel",
+        "Pan",
+        "Zoom",
+        "Length",
+        "Probe",
+      ];
+      for (const t of toolNames) {
+        if (t === activeTool) {
+          toolGroup.setToolActive(t, {
+            bindings: [
+              { mouseButton: csTools.Enums.MouseBindings.Primary },
+            ],
+          });
+        } else if (t === "Length" || t === "Probe") {
+          toolGroup.setToolEnabled(t);
+        } else {
+          toolGroup.setToolPassive(t);
+        }
+      }
+    };
+    updateTool();
+  }, [activeTool]);
+
+  // Apply preset
+  useEffect(() => {
+    if (!activePreset || !renderingEngineRef.current) return;
+
+    const applyPreset = async () => {
+      const cs = await import("@cornerstonejs/core");
+      const engine = renderingEngineRef.current as InstanceType<
+        typeof cs.RenderingEngine
+      >;
+      const viewport = engine.getViewport(viewportIdRef.current) as unknown as {
+        setProperties: (props: Record<string, unknown>) => void;
+        render: () => void;
+      };
+      if (!viewport) return;
+
+      const lower = activePreset.windowCenter - activePreset.windowWidth / 2;
+      const upper = activePreset.windowCenter + activePreset.windowWidth / 2;
+      viewport.setProperties({
+        voiRange: { lower, upper },
+      });
+      viewport.render();
+      onWindowChangeRef.current(activePreset.windowWidth, activePreset.windowCenter);
+    };
+    applyPreset();
+  }, [activePreset]);
+
+  return (
+    <div className="relative flex-1 bg-black">
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+        </div>
+      )}
+      <div
+        ref={containerRef}
+        className="h-full w-full"
+        onContextMenu={(e) => e.preventDefault()}
+      />
+    </div>
+  );
+}

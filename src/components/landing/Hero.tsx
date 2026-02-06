@@ -15,10 +15,10 @@ export default function Hero() {
       </div>
 
       <h1 className="relative text-5xl sm:text-7xl font-bold tracking-tight leading-[1.1]">
-        Medical imaging,
+        Medical imaging
         <br />
         <span className="text-accent glow-green-text">
-          right in your browser.
+          in your browser.
         </span>
       </h1>
 

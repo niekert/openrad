@@ -77,7 +77,7 @@ export default function Hero() {
             </div>
             <div className="flex-1 mx-8">
               <div className="mx-auto max-w-md rounded-md bg-[#1a1a1a] px-3 py-1 text-xs text-muted text-center font-mono">
-                openrad.vercel.app/viewer
+                openrad.com/viewer
               </div>
             </div>
           </div>

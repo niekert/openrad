@@ -64,7 +64,7 @@ export default function Toolbar({
   const [presetsOpen, setPresetsOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-1 border-b border-border px-3 py-1.5">
+    <div className="flex h-10 items-center gap-1 border-b border-border px-3">
       {/* Tools */}
       <div className="flex items-center gap-1">
         {tools.map((tool) => (

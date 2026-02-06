@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Hero() {
   return (
@@ -62,6 +63,20 @@ export default function Hero() {
           </svg>
           View on GitHub
         </a>
+      </div>
+
+      {/* Screenshot */}
+      <div className="relative mt-16 w-full max-w-5xl">
+        <div className="rounded-xl border border-border overflow-hidden shadow-2xl shadow-accent/5">
+          <Image
+            src="/screenshot.png"
+            alt="OpenRad viewer showing a CT scan"
+            width={1280}
+            height={800}
+            className="w-full h-auto"
+            priority
+          />
+        </div>
       </div>
     </section>
   );

@@ -4,6 +4,8 @@ Open source medical image viewer that runs entirely in your browser. View CT sca
 
 ### **[Live at openrad.vercel.app](https://openrad.vercel.app/)**
 
+![OpenRad viewer screenshot](public/screenshot.png)
+
 ## Features
 
 - **100% local** — your files never leave your device

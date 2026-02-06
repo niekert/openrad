@@ -18,7 +18,7 @@ const features = [
     ),
     title: "Instant",
     description:
-      "No waiting, no downloads, no installs. Just open your DICOM folder and start viewing your scans immediately.",
+      "No waiting, no downloads, no installs. Just open your DICOM folder and start viewing scans immediately.",
   },
   {
     icon: (
@@ -31,26 +31,43 @@ const features = [
     description:
       "Window/level presets, measurements, zoom, pan, and smooth scrolling through hundreds of slices.",
   },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
+      </svg>
+    ),
+    title: "Open Source",
+    description:
+      "Fully open source and free to use. Inspect the code, contribute, or self-host — no vendor lock-in.",
+  },
 ];
 
 export default function Features() {
   return (
     <section className="px-6 py-20">
-      <div className="mx-auto grid max-w-4xl grid-cols-1 gap-6 sm:grid-cols-3">
-        {features.map((f) => (
-          <div
-            key={f.title}
-            className="glass rounded-2xl p-6 transition-all hover:border-border-bright"
-          >
-            <div className="mb-4 inline-flex items-center justify-center rounded-xl bg-accent-dim p-2.5 text-accent">
-              {f.icon}
+      <div className="mx-auto max-w-6xl">
+        <h2 className="mb-10 text-center text-sm font-semibold uppercase tracking-widest text-muted font-mono">
+          Features
+        </h2>
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          {features.map((f) => (
+            <div
+              key={f.title}
+              className="rounded-xl border border-border bg-surface/50 p-6 transition-all hover:border-border-bright hover:glow-green-sm"
+            >
+              <div className="mb-4 inline-flex items-center justify-center rounded-lg bg-accent-dim p-2.5 text-accent">
+                {f.icon}
+              </div>
+              <h3 className="text-lg font-semibold font-mono">{f.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted">
+                {f.description}
+              </p>
             </div>
-            <h3 className="text-lg font-semibold">{f.title}</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              {f.description}
-            </p>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </section>
   );

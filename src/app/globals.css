@@ -1,16 +1,17 @@
 @import "tailwindcss";
 
 @theme inline {
-  --color-background: #09090b;
-  --color-foreground: #fafafa;
+  --color-background: #0a0a0a;
+  --color-foreground: #e0e0e0;
+  --color-foreground-bright: #ffffff;
   --color-muted: #a1a1aa;
-  --color-border: rgba(255, 255, 255, 0.06);
-  --color-border-bright: rgba(255, 255, 255, 0.12);
-  --color-surface: #18181b;
-  --color-surface-bright: #27272a;
-  --color-accent: #06b6d4;
-  --color-accent-dim: rgba(6, 182, 212, 0.15);
-  --color-violet: #8b5cf6;
+  --color-border: rgba(0, 255, 65, 0.08);
+  --color-border-bright: rgba(0, 255, 65, 0.20);
+  --color-surface: #111111;
+  --color-surface-bright: #1a1a1a;
+  --color-accent: #00ff41;
+  --color-accent-dim: rgba(0, 255, 65, 0.10);
+  --color-accent-muted: #22c55e;
   --color-emerald: #10b981;
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -24,10 +25,10 @@ body {
 
 /* Glassmorphism utility */
 .glass {
-  background: rgba(24, 24, 27, 0.7);
+  background: rgba(10, 10, 10, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(0, 255, 65, 0.08);
 }
 
 /* Subtle noise overlay */
@@ -44,12 +45,53 @@ body {
 }
 
 /* Glow effect for buttons */
-.glow-cyan {
-  box-shadow: 0 0 20px rgba(6, 182, 212, 0.3), 0 0 60px rgba(6, 182, 212, 0.1);
+.glow-green {
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.3), 0 0 60px rgba(0, 255, 65, 0.1);
 }
 
-.glow-cyan-sm {
-  box-shadow: 0 0 10px rgba(6, 182, 212, 0.2);
+.glow-green-sm {
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.2);
+}
+
+/* Text glow for headings */
+.glow-green-text {
+  text-shadow: 0 0 30px rgba(0, 255, 65, 0.3), 0 0 80px rgba(0, 255, 65, 0.1);
+}
+
+/* Terminal window component */
+.terminal-window {
+  background: #0d0d0d;
+  border: 1px solid rgba(0, 255, 65, 0.12);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.terminal-window .terminal-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: rgba(0, 255, 65, 0.03);
+  border-bottom: 1px solid rgba(0, 255, 65, 0.08);
+}
+
+.terminal-window .terminal-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0, 255, 65, 0.3);
+}
+
+.terminal-window .terminal-dot:first-child {
+  background: rgba(255, 95, 87, 0.7);
+}
+
+.terminal-window .terminal-dot:nth-child(2) {
+  background: rgba(255, 189, 46, 0.7);
+}
+
+.terminal-window .terminal-dot:nth-child(3) {
+  background: rgba(39, 201, 63, 0.7);
 }
 
 /* Animated gradient border for drop zone */
@@ -62,7 +104,7 @@ body {
   background-image: repeating-linear-gradient(
     90deg,
     var(--color-accent) 0%,
-    var(--color-violet) 25%,
+    var(--color-accent-muted) 25%,
     var(--color-accent) 50%
   );
   background-size: 200% 100%;
@@ -79,12 +121,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 255, 65, 0.1);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 255, 65, 0.2);
 }
 
 /* Cornerstone viewport should not show outline */

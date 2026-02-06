@@ -74,7 +74,7 @@ export default function Toolbar({
             title={tool.label}
             className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
               activeTool === tool.name
-                ? "bg-accent-dim text-accent glow-cyan-sm"
+                ? "bg-accent-dim text-accent glow-green-sm"
                 : "text-muted hover:text-foreground hover:bg-surface"
             }`}
           >

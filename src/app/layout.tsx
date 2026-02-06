@@ -13,23 +13,26 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OpenCT — View CT Scans in Your Browser",
+  title: "OpenRad — View Medical Images in Your Browser",
   description:
-    "View your hospital CT scan DICOM files instantly in the browser. No uploads, no installs, 100% private. Works with any DICOM CD or folder.",
+    "View CT scans, MRI, and X-rays instantly in the browser. No uploads, no installs, 100% private. Open source DICOM viewer for any medical imaging modality.",
   keywords: [
-    "CT scan viewer",
     "DICOM viewer",
+    "CT scan viewer",
+    "MRI viewer",
+    "X-ray viewer",
     "medical imaging",
     "browser DICOM",
-    "CT scan online",
-    "DICOM CD viewer",
-    "medical image viewer",
     "open source DICOM",
+    "medical image viewer",
+    "OpenRad",
+    "DICOM CD viewer",
+    "radiology viewer",
   ],
   openGraph: {
-    title: "OpenCT — View CT Scans in Your Browser",
+    title: "OpenRad — View Medical Images in Your Browser",
     description:
-      "View your hospital CT scan DICOM files instantly in the browser. No uploads, no installs, 100% private.",
+      "View CT scans, MRI, and X-rays instantly in the browser. No uploads, no installs, 100% private.",
     type: "website",
   },
 };

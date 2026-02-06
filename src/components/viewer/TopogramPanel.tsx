@@ -67,6 +67,12 @@ export default function TopogramPanel({
       // Preload the single image
       await (cs.imageLoader as unknown as { loadAndCacheImage: (id: string) => Promise<unknown> })
         .loadAndCacheImage(imageIds[0]);
+
+      if (destroyed) return;
+
+      // Fit image to panel width
+      viewport.resetCamera();
+      viewport.render();
     };
 
     setup();
@@ -123,32 +129,34 @@ export default function TopogramPanel({
     updateLine();
   }, [currentSlicePosition]);
 
-  // ResizeObserver to recalculate line on container resize
+  // ResizeObserver to re-fit image and recalculate line on container resize
   useEffect(() => {
     if (!containerRef.current) return;
 
     const observer = new ResizeObserver(() => {
-      if (!currentSlicePosition || !viewportRef.current || !lineRef.current || !containerRef.current) return;
+      if (!viewportRef.current || !containerRef.current) return;
 
-      const updateLine = async () => {
+      const onResize = async () => {
         const cs = await import("@cornerstonejs/core");
         const viewport = viewportRef.current as InstanceType<typeof cs.StackViewport>;
         if (!viewport) return;
 
-        // Trigger a resize on the rendering engine
+        // Resize canvas and re-fit image
         if (renderingEngineRef.current) {
           (renderingEngineRef.current as { resize: () => void }).resize();
         }
+        viewport.resetCamera();
+        viewport.render();
 
-        try {
-          const worldPoint: [number, number, number] = [
-            currentSlicePosition[0],
-            currentSlicePosition[1],
-            currentSlicePosition[2],
-          ];
-          const canvasPoint = viewport.worldToCanvas(worldPoint);
-
-          if (lineRef.current && containerRef.current) {
+        // Update line position if we have one
+        if (currentSlicePosition && lineRef.current && containerRef.current) {
+          try {
+            const worldPoint: [number, number, number] = [
+              currentSlicePosition[0],
+              currentSlicePosition[1],
+              currentSlicePosition[2],
+            ];
+            const canvasPoint = viewport.worldToCanvas(worldPoint);
             const containerHeight = containerRef.current.clientHeight;
             const y = canvasPoint[1];
             if (y >= 0 && y <= containerHeight) {
@@ -157,11 +165,11 @@ export default function TopogramPanel({
             } else {
               lineRef.current.style.display = "none";
             }
-          }
-        } catch { /* ignore */ }
+          } catch { /* ignore */ }
+        }
       };
 
-      updateLine();
+      onResize();
     });
 
     observer.observe(containerRef.current);
@@ -209,8 +217,7 @@ export default function TopogramPanel({
 
   return (
     <div
-      className="relative flex-shrink-0 bg-black cursor-pointer"
-      style={{ width: 120 }}
+      className="relative h-full w-full bg-black cursor-pointer"
       onClick={handleClick}
     >
       <div

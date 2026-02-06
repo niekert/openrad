@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import type { StudyTree, Series } from "@/lib/dicom/types";
 import type { WindowPreset } from "@/lib/cornerstone/presets";
 import { CT_PRESETS } from "@/lib/cornerstone/presets";
@@ -14,6 +14,8 @@ import Toolbar, { type ToolName } from "./Toolbar";
 import StatusBar from "./StatusBar";
 import DicomViewport from "./DicomViewport";
 import TopogramPanel from "./TopogramPanel";
+import PanelActivityBar from "./PanelActivityBar";
+import PanelContainer from "./PanelContainer";
 import Link from "next/link";
 
 export default function ViewerApp() {
@@ -41,6 +43,10 @@ export default function ViewerApp() {
   const [axialSlicePositions, setAxialSlicePositions] = useState<(number[] | null)[] | null>(null);
   const [jumpToSliceIndex, setJumpToSliceIndex] = useState<number | null>(null);
 
+  // Panel manager state
+  const [activePanelId, setActivePanelId] = useState<string | null>(null);
+  const [panelWidth, setPanelWidth] = useState(200);
+
   // Find topogram series for the active series' study
   const topogramSeries = useMemo(() => {
     if (!activeSeries || !studyTree) return null;
@@ -65,6 +71,44 @@ export default function ViewerApp() {
     setAxialSlicePositions(null);
     setJumpToSliceIndex(null);
   }, [activeSeries]);
+
+  // Auto-open topogram panel when it becomes available, auto-close when it doesn't
+  const prevTopogramRef = useRef(topogramSeries);
+  useEffect(() => {
+    const hadTopogram = !!prevTopogramRef.current;
+    const hasTopogram = !!topogramSeries;
+    prevTopogramRef.current = topogramSeries;
+
+    // Became available → auto-open
+    if (!hadTopogram && hasTopogram) {
+      setActivePanelId("topogram");
+    }
+    // Became unavailable → close if it was showing
+    if (hadTopogram && !hasTopogram) {
+      setActivePanelId((prev) => (prev === "topogram" ? null : prev));
+    }
+  }, [topogramSeries]);
+
+  const handlePanelToggle = useCallback((id: string) => {
+    setActivePanelId((prev) => (prev === id ? null : id));
+  }, []);
+
+  const panels = useMemo(
+    () => [
+      {
+        id: "topogram",
+        title: "Topogram",
+        available: !!topogramSeries,
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="6" y="2" width="12" height="20" rx="2" />
+            <line x1="6" y1="12" x2="18" y2="12" strokeWidth="2" stroke="currentColor" />
+          </svg>
+        ),
+      },
+    ],
+    [topogramSeries]
+  );
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
     setLoading(true);
@@ -234,13 +278,24 @@ export default function ViewerApp() {
                 activePreset={activePreset.name}
               />
               <div className="flex flex-1 overflow-hidden">
-                {topogramSeries && (
-                  <TopogramPanel
-                    series={topogramSeries}
-                    currentSlicePosition={currentSlicePosition}
-                    axialSlicePositions={axialSlicePositions}
-                    onJumpToSlice={handleJumpToSlice}
-                  />
+                <PanelActivityBar
+                  panels={panels}
+                  activePanelId={activePanelId}
+                  onPanelToggle={handlePanelToggle}
+                />
+                {activePanelId === "topogram" && topogramSeries && (
+                  <PanelContainer
+                    title="Topogram"
+                    width={panelWidth}
+                    onWidthChange={setPanelWidth}
+                  >
+                    <TopogramPanel
+                      series={topogramSeries}
+                      currentSlicePosition={currentSlicePosition}
+                      axialSlicePositions={axialSlicePositions}
+                      onJumpToSlice={handleJumpToSlice}
+                    />
+                  </PanelContainer>
                 )}
                 <DicomViewport
                   series={activeSeries}

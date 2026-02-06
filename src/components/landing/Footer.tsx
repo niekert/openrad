@@ -25,7 +25,7 @@ export default function Footer() {
             DICOM Guide
           </Link>
           <a
-            href="https://github.com/nickkra/openrad"
+            href="https://github.com/niekert/openrad"
             target="_blank"
             rel="noopener noreferrer"
             className="hover:text-accent transition-colors"

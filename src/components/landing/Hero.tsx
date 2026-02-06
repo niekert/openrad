@@ -47,7 +47,7 @@ export default function Hero() {
           </svg>
         </Link>
         <a
-          href="https://github.com/nickkra/openrad"
+          href="https://github.com/niekert/OpenRad"
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 text-sm text-muted hover:text-accent transition-colors"

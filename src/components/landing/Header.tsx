@@ -35,7 +35,7 @@ export default function Header() {
         </div>
         <div className="flex items-center gap-3">
           <a
-            href="https://github.com/nickkra/openrad"
+            href="https://github.com/niekert/OpenRad"
             target="_blank"
             rel="noopener noreferrer"
             className="hidden sm:flex items-center gap-1.5 text-sm text-muted hover:text-foreground transition-colors"

@@ -23,7 +23,7 @@ export default function PanelActivityBar({
   if (visiblePanels.length === 0) return null;
 
   return (
-    <div className="flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 border-r border-border bg-surface pt-2">
+    <div className="flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 border-r border-border bg-black pt-2">
       {visiblePanels.map((panel) => {
         const isActive = activePanelId === panel.id;
         return (

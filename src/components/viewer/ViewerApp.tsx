@@ -1,17 +1,19 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import type { StudyTree, Series } from "@/lib/dicom/types";
 import type { WindowPreset } from "@/lib/cornerstone/presets";
 import { CT_PRESETS } from "@/lib/cornerstone/presets";
 import { registerFiles, clearFiles } from "@/lib/dicom/file-manager";
 import { parseDicomdirFromFiles } from "@/lib/dicom/parse-dicomdir";
 import { parseFilesWithoutDicomdir } from "@/lib/dicom/parse-files";
+import { findTopogramSeries } from "@/lib/dicom/topogram-utils";
 import FileDropZone from "./FileDropZone";
 import StudyBrowser from "./StudyBrowser";
 import Toolbar, { type ToolName } from "./Toolbar";
 import StatusBar from "./StatusBar";
 import DicomViewport from "./DicomViewport";
+import TopogramPanel from "./TopogramPanel";
 import Link from "next/link";
 
 export default function ViewerApp() {
@@ -33,6 +35,36 @@ export default function ViewerApp() {
   const [windowCenter, setWindowCenter] = useState(40);
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
+
+  // Topogram state
+  const [currentSlicePosition, setCurrentSlicePosition] = useState<number[] | null>(null);
+  const [axialSlicePositions, setAxialSlicePositions] = useState<(number[] | null)[] | null>(null);
+  const [jumpToSliceIndex, setJumpToSliceIndex] = useState<number | null>(null);
+
+  // Find topogram series for the active series' study
+  const topogramSeries = useMemo(() => {
+    if (!activeSeries || !studyTree) return null;
+
+    // Find which study this series belongs to
+    const study = studyTree.studies.find((s) =>
+      s.series.some((ser) => ser.seriesInstanceUID === activeSeries.seriesInstanceUID)
+    );
+    if (!study) return null;
+
+    const topo = findTopogramSeries(study);
+
+    // Don't show topogram if the active series IS the topogram
+    if (topo && topo.seriesInstanceUID === activeSeries.seriesInstanceUID) return null;
+
+    return topo;
+  }, [activeSeries, studyTree]);
+
+  // Reset topogram state when active series changes
+  useEffect(() => {
+    setCurrentSlicePosition(null);
+    setAxialSlicePositions(null);
+    setJumpToSliceIndex(null);
+  }, [activeSeries]);
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
     setLoading(true);
@@ -81,9 +113,10 @@ export default function ViewerApp() {
     setPresetTrigger(preset);
   }, []);
 
-  const handleSliceChange = useCallback((current: number, total: number) => {
+  const handleSliceChange = useCallback((current: number, total: number, position: number[] | null) => {
     setCurrentSlice(current);
     setTotalSlices(total);
+    setCurrentSlicePosition(position);
   }, []);
 
   const handleWindowChange = useCallback((ww: number, wc: number) => {
@@ -94,6 +127,15 @@ export default function ViewerApp() {
   const handleImageInfo = useCallback((w: number, h: number) => {
     setImageWidth(w);
     setImageHeight(h);
+  }, []);
+
+  const handleAxialPositionsReady = useCallback((positions: (number[] | null)[]) => {
+    setAxialSlicePositions(positions);
+  }, []);
+
+  const handleJumpToSlice = useCallback((index: number) => {
+    // Use a new object wrapper to ensure the effect triggers even for same index
+    setJumpToSliceIndex(index);
   }, []);
 
   // Keyboard shortcuts
@@ -133,7 +175,7 @@ export default function ViewerApp() {
         <header className="flex items-center justify-between border-b border-border px-4 py-2 glass">
           <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
             <span className="inline-block h-2 w-2 rounded-full bg-accent" />
-            OpenCT
+            OpenRad
           </Link>
         </header>
         <FileDropZone
@@ -151,7 +193,7 @@ export default function ViewerApp() {
       <header className="flex items-center justify-between border-b border-border px-4 py-2 glass">
         <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
           <span className="inline-block h-2 w-2 rounded-full bg-accent" />
-          OpenCT
+          OpenRad
         </Link>
         <span className="text-xs text-muted truncate max-w-xs">
           {activeSeries?.seriesDescription}
@@ -191,14 +233,26 @@ export default function ViewerApp() {
                 onPresetChange={handlePresetChange}
                 activePreset={activePreset.name}
               />
-              <DicomViewport
-                series={activeSeries}
-                activeTool={activeTool}
-                activePreset={presetTrigger}
-                onSliceChange={handleSliceChange}
-                onWindowChange={handleWindowChange}
-                onImageInfo={handleImageInfo}
-              />
+              <div className="flex flex-1 overflow-hidden">
+                {topogramSeries && (
+                  <TopogramPanel
+                    series={topogramSeries}
+                    currentSlicePosition={currentSlicePosition}
+                    axialSlicePositions={axialSlicePositions}
+                    onJumpToSlice={handleJumpToSlice}
+                  />
+                )}
+                <DicomViewport
+                  series={activeSeries}
+                  activeTool={activeTool}
+                  activePreset={presetTrigger}
+                  onSliceChange={handleSliceChange}
+                  onWindowChange={handleWindowChange}
+                  onImageInfo={handleImageInfo}
+                  onAxialPositionsReady={handleAxialPositionsReady}
+                  jumpToSliceIndex={jumpToSliceIndex}
+                />
+              </div>
               <StatusBar
                 currentSlice={currentSlice}
                 totalSlices={totalSlices}

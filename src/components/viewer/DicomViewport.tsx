@@ -9,9 +9,11 @@ interface DicomViewportProps {
   series: Series;
   activeTool: ToolName;
   activePreset: WindowPreset | null;
-  onSliceChange: (current: number, total: number) => void;
+  onSliceChange: (current: number, total: number, position: number[] | null) => void;
   onWindowChange: (ww: number, wc: number) => void;
   onImageInfo: (width: number, height: number) => void;
+  onAxialPositionsReady?: (positions: (number[] | null)[]) => void;
+  jumpToSliceIndex?: number | null;
 }
 
 export default function DicomViewport({
@@ -21,20 +23,34 @@ export default function DicomViewport({
   onSliceChange,
   onWindowChange,
   onImageInfo,
+  onAxialPositionsReady,
+  jumpToSliceIndex,
 }: DicomViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportIdRef = useRef<string>("ct-viewport");
   const renderingEngineRef = useRef<unknown>(null);
   const [loading, setLoading] = useState(true);
   const currentIndexRef = useRef(0);
+  const imageIdsRef = useRef<string[]>([]);
 
   // Store callbacks in refs to avoid re-running effects
   const onSliceChangeRef = useRef(onSliceChange);
   const onWindowChangeRef = useRef(onWindowChange);
   const onImageInfoRef = useRef(onImageInfo);
+  const onAxialPositionsReadyRef = useRef(onAxialPositionsReady);
   onSliceChangeRef.current = onSliceChange;
   onWindowChangeRef.current = onWindowChange;
   onImageInfoRef.current = onImageInfo;
+  onAxialPositionsReadyRef.current = onAxialPositionsReady;
+
+  // Helper: get position for current slice
+  const getPositionForIndex = useCallback(async (index: number): Promise<number[] | null> => {
+    const { getImageMetadata } = await import("@/lib/cornerstone/custom-image-loader");
+    const imageId = imageIdsRef.current[index];
+    if (!imageId) return null;
+    const meta = getImageMetadata(imageId);
+    return (meta?.imagePositionPatient as number[] | undefined) || null;
+  }, []);
 
   const setupViewport = useCallback(async () => {
     if (!containerRef.current) return;
@@ -52,8 +68,9 @@ export default function DicomViewport({
     await initCornerstone();
 
     const imageIds = series.instances.map((inst) => getImageId(inst.fileKey));
-    console.log(`[OpenCT] Setting up viewport with ${imageIds.length} images`);
-    console.log(`[OpenCT] First imageId: ${imageIds[0]}`);
+    imageIdsRef.current = imageIds;
+    console.log(`[OpenRad] Setting up viewport with ${imageIds.length} images`);
+    console.log(`[OpenRad] First imageId: ${imageIds[0]}`);
     if (imageIds.length === 0) return;
 
     // Clean up previous engine
@@ -79,7 +96,7 @@ export default function DicomViewport({
 
     const viewport = renderingEngine.getViewport(
       viewportIdRef.current
-    ) 
+    ) as InstanceType<typeof cs.StackViewport>;
 
     // Set up tool group
     const toolGroup = createToolGroup();
@@ -87,28 +104,30 @@ export default function DicomViewport({
       toolGroup.addViewport(viewportIdRef.current, engineId);
     }
 
-    console.log("[OpenCT] Calling viewport.setStack...");
+    console.log("[OpenRad] Calling viewport.setStack...");
     try {
       await viewport.setStack(imageIds, 0);
-      console.log("[OpenCT] setStack completed successfully");
+      console.log("[OpenRad] setStack completed successfully");
     } catch (err) {
-      console.error("[OpenCT] setStack failed:", err);
+      console.error("[OpenRad] setStack failed:", err);
     }
     currentIndexRef.current = 0;
 
     // Get image info
     const imageData = viewport.getImageData();
-    console.log("[OpenCT] imageData:", imageData);
+    console.log("[OpenRad] imageData:", imageData);
     if (imageData?.dimensions) {
       onImageInfoRef.current(imageData.dimensions[0], imageData.dimensions[1]);
     }
 
-    onSliceChangeRef.current(1, imageIds.length);
+    // Report initial slice with position
+    const initialPos = await getPositionForIndex(0);
+    onSliceChangeRef.current(1, imageIds.length, initialPos);
 
     // Listen for errors
     const element = containerRef.current;
     element.addEventListener(cs.Enums.Events.IMAGE_LOAD_ERROR, (e: Event) => {
-      console.error("[OpenCT] IMAGE_LOAD_ERROR:", (e as CustomEvent).detail);
+      console.error("[OpenRad] IMAGE_LOAD_ERROR:", (e as CustomEvent).detail);
     });
 
     // Listen for image rendered to update WW/WC
@@ -127,7 +146,7 @@ export default function DicomViewport({
     );
 
     // Mouse wheel scrolling — query Cornerstone for actual index
-    const handleWheel = (e: WheelEvent) => {
+    const handleWheel = async (e: WheelEvent) => {
       e.preventDefault();
       const delta = e.deltaY > 0 ? 1 : -1;
       const vp = viewport as unknown as {
@@ -138,9 +157,10 @@ export default function DicomViewport({
       const before = vp.getCurrentImageIdIndex();
       vp.scroll(delta);
       const after = vp.getCurrentImageIdIndex();
-      console.log(`[OpenCT wheel] deltaY=${e.deltaY} delta=${delta} before=${before} after=${after}`);
+      console.log(`[OpenRad wheel] deltaY=${e.deltaY} delta=${delta} before=${before} after=${after}`);
       currentIndexRef.current = after;
-      onSliceChangeRef.current(after + 1, imageIds.length);
+      const pos = await getPositionForIndex(after);
+      onSliceChangeRef.current(after + 1, imageIds.length, pos);
     };
 
     element.addEventListener("wheel", handleWheel, { passive: false });
@@ -148,6 +168,7 @@ export default function DicomViewport({
     // Preload all images in background for smooth scrolling
     const preloadAborted = { current: false };
     const preloadStack = async () => {
+      const { getImageMetadata } = await import("@/lib/cornerstone/custom-image-loader");
       const batchSize = 20;
       for (let i = 0; i < imageIds.length; i += batchSize) {
         if (preloadAborted.current) break;
@@ -162,7 +183,15 @@ export default function DicomViewport({
         await new Promise((r) => setTimeout(r, 0));
       }
       if (!preloadAborted.current) {
-        console.log(`[OpenCT] Preloaded all ${imageIds.length} images`);
+        console.log(`[OpenRad] Preloaded all ${imageIds.length} images`);
+        // Report all positions after preload completes
+        if (onAxialPositionsReadyRef.current) {
+          const positions = imageIds.map((id) => {
+            const meta = getImageMetadata(id);
+            return (meta?.imagePositionPatient as number[] | undefined) || null;
+          });
+          onAxialPositionsReadyRef.current(positions);
+        }
       }
     };
     preloadStack();
@@ -177,7 +206,7 @@ export default function DicomViewport({
       );
       element.removeEventListener("wheel", handleWheel);
     };
-  }, [series]);
+  }, [series, getPositionForIndex]);
 
   useEffect(() => {
     let cleanup: (() => void) | undefined;
@@ -197,6 +226,29 @@ export default function DicomViewport({
       }
     };
   }, [setupViewport]);
+
+  // Jump to slice when jumpToSliceIndex changes
+  useEffect(() => {
+    if (jumpToSliceIndex == null || !renderingEngineRef.current) return;
+
+    const jump = async () => {
+      const cs = await import("@cornerstonejs/core");
+      const engine = renderingEngineRef.current as InstanceType<typeof cs.RenderingEngine>;
+      const viewport = engine.getViewport(viewportIdRef.current) as unknown as {
+        setImageIdIndex: (index: number) => Promise<void>;
+        getCurrentImageIdIndex: () => number;
+        getImageIds: () => string[];
+      };
+      if (!viewport) return;
+
+      await viewport.setImageIdIndex(jumpToSliceIndex);
+      currentIndexRef.current = jumpToSliceIndex;
+      const pos = await getPositionForIndex(jumpToSliceIndex);
+      const total = imageIdsRef.current.length;
+      onSliceChangeRef.current(jumpToSliceIndex + 1, total, pos);
+    };
+    jump();
+  }, [jumpToSliceIndex, getPositionForIndex]);
 
   // Update active tool
   useEffect(() => {

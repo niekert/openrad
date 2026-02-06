@@ -102,7 +102,7 @@ function loadImage(imageId: string): { promise: Promise<Record<string, unknown>>
       imageOrientationPatient,
     });
 
-    console.log(`[OpenCT loader] OK: ${rows}x${columns}, slope=${slope}, intercept=${intercept}`);
+    console.log(`[OpenRad loader] OK: ${rows}x${columns}, slope=${slope}, intercept=${intercept}`);
 
     return {
       imageId,
@@ -193,9 +193,13 @@ export function registerFileImageLoader(): void {
     loadImage as unknown as cornerstone.Types.ImageLoaderFn
   );
   cornerstone.metaData.addProvider(metadataProvider, 10000);
-  console.log("[OpenCT] Registered fileid: image loader + metadata provider");
+  console.log("[OpenRad] Registered fileid: image loader + metadata provider");
 }
 
 export function getImageId(fileKey: string): string {
   return `${IMAGE_SCHEME}:${fileKey}`;
+}
+
+export function getImageMetadata(imageId: string): Record<string, unknown> | undefined {
+  return imageMetadataMap.get(imageId);
 }

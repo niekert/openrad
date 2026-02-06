@@ -4,7 +4,7 @@ Open source medical image viewer that runs entirely in your browser. View CT sca
 
 ### **[Live at openrad.vercel.app](https://openrad.vercel.app/)**
 
-![OpenRad viewer screenshot](public/screenshot.png)
+![OpenRad viewer screenshot](public/screenshot.jpg)
 
 ## Features
 

@@ -3,7 +3,7 @@ import Image from "next/image";
 
 export default function Hero() {
   return (
-    <section className="relative flex flex-col items-center justify-center px-6 pt-32 pb-20 text-center">
+    <section className="relative flex flex-col items-center justify-center px-4 sm:px-6 pt-32 pb-10 text-center">
       {/* Gradient glow */}
       <div className="pointer-events-none absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[800px] opacity-20 blur-[120px] bg-accent" />
 
@@ -66,7 +66,7 @@ export default function Hero() {
       </div>
 
       {/* Screenshot in browser mockup */}
-      <div className="relative mt-16 w-full max-w-5xl">
+      <div className="relative mt-10 sm:mt-16 w-full max-w-5xl">
         <div className="rounded-xl border border-border bg-[#0d0d0d] overflow-hidden shadow-2xl shadow-accent/5">
           {/* Browser chrome bar */}
           <div className="flex items-center gap-2 px-4 py-3 bg-[#0d0d0d] border-b border-border">

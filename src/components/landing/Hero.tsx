@@ -65,9 +65,22 @@ export default function Hero() {
         </a>
       </div>
 
-      {/* Screenshot */}
+      {/* Screenshot in browser mockup */}
       <div className="relative mt-16 w-full max-w-5xl">
-        <div className="rounded-xl border border-border overflow-hidden shadow-2xl shadow-accent/5">
+        <div className="rounded-xl border border-border bg-[#0d0d0d] overflow-hidden shadow-2xl shadow-accent/5">
+          {/* Browser chrome bar */}
+          <div className="flex items-center gap-2 px-4 py-3 bg-[#0d0d0d] border-b border-border">
+            <div className="flex items-center gap-1.5">
+              <span className="h-3 w-3 rounded-full bg-[#ff5f57]/70" />
+              <span className="h-3 w-3 rounded-full bg-[#febc2e]/70" />
+              <span className="h-3 w-3 rounded-full bg-[#27c93f]/70" />
+            </div>
+            <div className="flex-1 mx-8">
+              <div className="mx-auto max-w-md rounded-md bg-[#1a1a1a] px-3 py-1 text-xs text-muted text-center font-mono">
+                openrad.vercel.app/viewer
+              </div>
+            </div>
+          </div>
           <Image
             src="/screenshot.png"
             alt="OpenRad viewer showing a CT scan"

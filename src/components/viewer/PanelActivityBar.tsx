@@ -9,7 +9,7 @@ interface PanelDef {
 
 interface PanelActivityBarProps {
   panels: PanelDef[];
-  activePanelIds: Set<string>;
+  activePanelIds: ReadonlySet<string>;
   onPanelToggle: (panelId: string) => void;
 }
 

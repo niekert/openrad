@@ -1,18 +1,92 @@
 import * as cornerstone from "@cornerstonejs/core";
 import dicomParser from "dicom-parser";
-import { getFile } from "@/lib/dicom/file-manager";
+import { getActiveFileSession, getFile } from "@/lib/dicom/file-manager";
 
 const IMAGE_SCHEME = "fileid";
 
-// Store parsed metadata per imageId so the metadata provider can return it
-const imageMetadataMap = new Map<string, Record<string, unknown>>();
+export interface ImageMetadata {
+  rows: number;
+  columns: number;
+  bitsAllocated: number;
+  bitsStored: number;
+  highBit: number;
+  pixelRepresentation: number;
+  samplesPerPixel: number;
+  photometricInterpretation: string;
+  slope: number;
+  intercept: number;
+  windowCenter: number;
+  windowWidth: number;
+  rowPixelSpacing: number;
+  columnPixelSpacing: number;
+  sliceThickness: number;
+  imagePositionPatient: [number, number, number];
+  imageOrientationPatient: [number, number, number, number, number, number];
+}
 
-function loadImage(imageId: string): { promise: Promise<Record<string, unknown>> } {
-  const fileKey = imageId.replace(`${IMAGE_SCHEME}:`, "");
+const imageMetadataMap = new Map<string, ImageMetadata>();
+
+function parseImageId(imageId: string): { sessionId: string; fileKey: string } {
+  const prefix = `${IMAGE_SCHEME}:`;
+  if (!imageId.startsWith(prefix)) {
+    return {
+      sessionId: getActiveFileSession(),
+      fileKey: imageId,
+    };
+  }
+
+  const rest = imageId.slice(prefix.length);
+  const divider = rest.indexOf(":");
+  if (divider === -1) {
+    return {
+      sessionId: getActiveFileSession(),
+      fileKey: rest,
+    };
+  }
+
+  return {
+    sessionId: rest.slice(0, divider),
+    fileKey: rest.slice(divider + 1),
+  };
+}
+
+function parseThreeVector(raw: string | undefined, fallback: [number, number, number]): [number, number, number] {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parts = raw.split("\\").map(Number);
+  if (parts.length < 3 || parts.some((value) => !Number.isFinite(value))) {
+    return fallback;
+  }
+
+  return [parts[0], parts[1], parts[2]];
+}
+
+function parseSixVector(
+  raw: string | undefined,
+  fallback: [number, number, number, number, number, number]
+): [number, number, number, number, number, number] {
+  if (!raw) {
+    return fallback;
+  }
+
+  const parts = raw.split("\\").map(Number);
+  if (parts.length < 6 || parts.some((value) => !Number.isFinite(value))) {
+    return fallback;
+  }
+
+  return [parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]];
+}
+
+function loadImage(imageId: string): { promise: Promise<cornerstone.Types.IImage> } {
+  const { sessionId, fileKey } = parseImageId(imageId);
 
   const promise = (async () => {
-    const file = getFile(fileKey);
-    if (!file) throw new Error(`File not found: ${fileKey}`);
+    const file = getFile(fileKey, sessionId);
+    if (!file) {
+      throw new Error(`File not found: ${fileKey}`);
+    }
 
     const buffer = await file.arrayBuffer();
     const byteArray = new Uint8Array(buffer);
@@ -20,7 +94,9 @@ function loadImage(imageId: string): { promise: Promise<Record<string, unknown>>
 
     const rows = dataset.uint16("x00280010") || 0;
     const columns = dataset.uint16("x00280011") || 0;
-    if (!rows || !columns) throw new Error("Missing image dimensions");
+    if (!rows || !columns) {
+      throw new Error("Missing image dimensions");
+    }
 
     const bitsAllocated = dataset.uint16("x00280100") || 16;
     const bitsStored = dataset.uint16("x00280101") || bitsAllocated;
@@ -34,12 +110,13 @@ function loadImage(imageId: string): { promise: Promise<Record<string, unknown>>
     const windowWidth = parseFloat(dataset.string("x00281051") || "400");
 
     const pixelDataElement = dataset.elements["x7fe00010"];
-    if (!pixelDataElement) throw new Error("No pixel data");
+    if (!pixelDataElement) {
+      throw new Error("No pixel data");
+    }
 
     const offset = pixelDataElement.dataOffset;
     const numPixels = rows * columns * samplesPerPixel;
 
-    // Read raw pixel data and prescale to Hounsfield units
     let rawPixelData: Int16Array | Uint16Array | Uint8Array;
     if (bitsAllocated === 16) {
       if (pixelRepresentation === 1) {
@@ -52,36 +129,32 @@ function loadImage(imageId: string): { promise: Promise<Record<string, unknown>>
     }
 
     const pixelData = new Float32Array(numPixels);
-    let minVal = Infinity, maxVal = -Infinity;
+    let minVal = Infinity;
+    let maxVal = -Infinity;
     for (let i = 0; i < numPixels; i++) {
       const val = rawPixelData[i] * slope + intercept;
       pixelData[i] = val;
-      if (val < minVal) minVal = val;
-      if (val > maxVal) maxVal = val;
+      if (val < minVal) {
+        minVal = val;
+      }
+      if (val > maxVal) {
+        maxVal = val;
+      }
     }
 
-    // Parse spacing
     const pixelSpacingStr = dataset.string("x00280030");
-    let rowSpacing = 1, colSpacing = 1;
+    let rowSpacing = 1;
+    let colSpacing = 1;
     if (pixelSpacingStr) {
       const parts = pixelSpacingStr.split("\\");
       rowSpacing = parseFloat(parts[0]) || 1;
       colSpacing = parseFloat(parts[1]) || 1;
     }
 
-    // Parse position/orientation for metadata provider
-    const ippStr = dataset.string("x00200032"); // ImagePositionPatient
-    const ioStr = dataset.string("x00200037");  // ImageOrientationPatient
+    const imagePositionPatient = parseThreeVector(dataset.string("x00200032"), [0, 0, 0]);
+    const imageOrientationPatient = parseSixVector(dataset.string("x00200037"), [1, 0, 0, 0, 1, 0]);
     const sliceThickness = parseFloat(dataset.string("x00180050") || "1");
 
-    const imagePositionPatient = ippStr
-      ? ippStr.split("\\").map(Number)
-      : [0, 0, 0];
-    const imageOrientationPatient = ioStr
-      ? ioStr.split("\\").map(Number)
-      : [1, 0, 0, 0, 1, 0];
-
-    // Store metadata for the provider
     imageMetadataMap.set(imageId, {
       rows,
       columns,
@@ -102,9 +175,7 @@ function loadImage(imageId: string): { promise: Promise<Record<string, unknown>>
       imageOrientationPatient,
     });
 
-    console.log(`[OpenRad loader] OK: ${rows}x${columns}, slope=${slope}, intercept=${intercept}`);
-
-    return {
+    const image: cornerstone.Types.IImage = {
       imageId,
       minPixelValue: minVal,
       maxPixelValue: maxVal,
@@ -118,30 +189,37 @@ function loadImage(imageId: string): { promise: Promise<Record<string, unknown>>
       width: columns,
       color: samplesPerPixel > 1,
       rgba: false,
+      numberOfComponents: samplesPerPixel,
       columnPixelSpacing: colSpacing,
       rowPixelSpacing: rowSpacing,
       sliceThickness,
       sizeInBytes: pixelData.byteLength,
       invert: photometric === "MONOCHROME1",
       getPixelData: () => pixelData,
-      getCanvas: undefined,
-      numComps: samplesPerPixel,
+      getCanvas: () => document.createElement("canvas"),
       photometricInterpretation: photometric,
-      voiLUTFunction: "LINEAR",
+      dataType: "Float32Array",
+      voiLUTFunction: cornerstone.Enums.VOILUTFunctionType.LINEAR,
       preScale: {
         enabled: true,
         scaled: true,
       },
     };
+
+    return image;
   })();
 
   return { promise };
 }
 
-// Metadata provider for Cornerstone3D — it queries this for rendering info
-function metadataProvider(type: string, imageId: string): Record<string, unknown> | undefined {
+function metadataProvider(
+  type: string,
+  imageId: string
+): Record<string, unknown> | undefined {
   const meta = imageMetadataMap.get(imageId);
-  if (!meta) return undefined;
+  if (!meta) {
+    return undefined;
+  }
 
   switch (type) {
     case "imagePixelModule":
@@ -162,8 +240,8 @@ function metadataProvider(type: string, imageId: string): Record<string, unknown
         imagePositionPatient: meta.imagePositionPatient,
         imageOrientationPatient: meta.imageOrientationPatient,
         sliceThickness: meta.sliceThickness,
-        rowCosines: (meta.imageOrientationPatient as number[]).slice(0, 3),
-        columnCosines: (meta.imageOrientationPatient as number[]).slice(3, 6),
+        rowCosines: meta.imageOrientationPatient.slice(0, 3),
+        columnCosines: meta.imageOrientationPatient.slice(3, 6),
       };
     case "voiLutModule":
       return {
@@ -186,20 +264,27 @@ function metadataProvider(type: string, imageId: string): Record<string, unknown
 let registered = false;
 
 export function registerFileImageLoader(): void {
-  if (registered) return;
+  if (registered) {
+    return;
+  }
   registered = true;
-  cornerstone.imageLoader.registerImageLoader(
-    IMAGE_SCHEME,
-    loadImage as unknown as cornerstone.Types.ImageLoaderFn
-  );
+  cornerstone.imageLoader.registerImageLoader(IMAGE_SCHEME, loadImage);
   cornerstone.metaData.addProvider(metadataProvider, 10000);
-  console.log("[OpenRad] Registered fileid: image loader + metadata provider");
 }
 
-export function getImageId(fileKey: string): string {
-  return `${IMAGE_SCHEME}:${fileKey}`;
+export function getImageId(fileKey: string, sessionId = getActiveFileSession()): string {
+  return `${IMAGE_SCHEME}:${sessionId}:${fileKey}`;
 }
 
-export function getImageMetadata(imageId: string): Record<string, unknown> | undefined {
+export function getImageMetadata(imageId: string): ImageMetadata | undefined {
   return imageMetadataMap.get(imageId);
+}
+
+export function clearImageMetadataForSession(sessionId: string): void {
+  const prefix = `${IMAGE_SCHEME}:${sessionId}:`;
+  for (const imageId of imageMetadataMap.keys()) {
+    if (imageId.startsWith(prefix)) {
+      imageMetadataMap.delete(imageId);
+    }
+  }
 }

@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke:viewer": "npm run lint && npx tsc --noEmit && node scripts/smoke-viewer.mjs"
   },
   "dependencies": {
     "@cornerstonejs/core": "^4.15.30",

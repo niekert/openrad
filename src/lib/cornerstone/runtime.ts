@@ -70,25 +70,32 @@ interface MountedViewport {
 }
 
 let initialized = false;
+let initPromise: Promise<void> | null = null;
 
-function initCornerstoneRuntime() {
+async function initCornerstoneRuntime(): Promise<void> {
   if (initialized) {
     return;
   }
 
-  initCore();
-  initTools();
-  cache.setMaxCacheSize(2 * 1024 * 1024 * 1024);
-  registerFileImageLoader();
+  if (!initPromise) {
+    initPromise = (async () => {
+      await initCore();
+      initTools();
+      cache.setMaxCacheSize(2 * 1024 * 1024 * 1024);
+      registerFileImageLoader();
 
-  addTool(PanTool);
-  addTool(ZoomTool);
-  addTool(WindowLevelTool);
-  addTool(StackScrollTool);
-  addTool(LengthTool);
-  addTool(ProbeTool);
+      addTool(PanTool);
+      addTool(ZoomTool);
+      addTool(WindowLevelTool);
+      addTool(StackScrollTool);
+      addTool(LengthTool);
+      addTool(ProbeTool);
 
-  initialized = true;
+      initialized = true;
+    })();
+  }
+
+  await initPromise;
 }
 
 function isCustomEvent<T>(event: Event): event is CustomEvent<T> {
@@ -182,7 +189,6 @@ export class CornerstoneViewportRuntime {
     this.callbacks = callbacks;
     this.renderingEngineId = `ct-engine-${sessionId}`;
     log.debug("constructor", { sessionId });
-    initCornerstoneRuntime();
   }
 
   private getEngine(): RenderingEngine {
@@ -206,6 +212,7 @@ export class CornerstoneViewportRuntime {
     viewportId: RuntimeViewportId,
     element: HTMLDivElement,
   ): Promise<void> {
+    await initCornerstoneRuntime();
     log.debug("registerViewport", viewportId);
     if (this.mounted.has(viewportId)) {
       this.unregisterViewport(viewportId);

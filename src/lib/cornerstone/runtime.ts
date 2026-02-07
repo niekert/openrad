@@ -283,12 +283,30 @@ export class CornerstoneViewportRuntime {
       this.callbacks.onImageInfo(viewportId, dimensions[0], dimensions[1]);
     };
 
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+
+      const delta = event.deltaY > 0 ? 1 : -1;
+      stackViewport.scroll(delta);
+
+      const currentIndex = stackViewport.getCurrentImageIdIndex();
+      const imageIds = stackViewport.getImageIds();
+      const imageId = imageIds[currentIndex];
+      this.callbacks.onSliceChange(
+        viewportId,
+        currentIndex,
+        imageIds.length,
+        imageId ? getPosition(imageId) : null,
+      );
+    };
+
     element.addEventListener(CoreEnums.Events.STACK_NEW_IMAGE, onStackNewImage);
     element.addEventListener(CoreEnums.Events.IMAGE_RENDERED, onRendered);
     element.addEventListener(
       CoreEnums.Events.VIEWPORT_NEW_IMAGE_SET,
       onNewImageSet,
     );
+    element.addEventListener("wheel", onWheel, { passive: false });
 
     this.mounted.set(viewportId, {
       viewportId,
@@ -308,6 +326,7 @@ export class CornerstoneViewportRuntime {
           CoreEnums.Events.VIEWPORT_NEW_IMAGE_SET,
           onNewImageSet,
         );
+        element.removeEventListener("wheel", onWheel);
       },
     });
   }

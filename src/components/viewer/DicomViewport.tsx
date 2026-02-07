@@ -6,29 +6,39 @@ import type { WindowPreset } from "@/lib/cornerstone/presets";
 import type { ToolName } from "./Toolbar";
 
 interface DicomViewportProps {
+  viewportKey: string;
   series: Series;
   activeTool: ToolName;
   activePreset: WindowPreset | null;
   onSliceChange: (current: number, total: number, position: number[] | null) => void;
   onWindowChange: (ww: number, wc: number) => void;
   onImageInfo: (width: number, height: number) => void;
+  onSliceIndexChange?: (index: number, total: number, position: number[] | null) => void;
   onAxialPositionsReady?: (positions: (number[] | null)[]) => void;
   jumpToSliceIndex?: number | null;
+  forcedWindow?: { width: number; center: number } | null;
 }
 
 export default function DicomViewport({
+  viewportKey,
   series,
   activeTool,
   activePreset,
   onSliceChange,
   onWindowChange,
   onImageInfo,
+  onSliceIndexChange,
   onAxialPositionsReady,
   jumpToSliceIndex,
+  forcedWindow,
 }: DicomViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewportIdRef = useRef<string>("ct-viewport");
+  const instanceIdRef = useRef<string>(
+    `${viewportKey}-${Math.random().toString(36).slice(2, 8)}`
+  );
+  const viewportIdRef = useRef<string>(`ct-viewport-${instanceIdRef.current}`);
   const renderingEngineRef = useRef<unknown>(null);
+  const toolGroupIdRef = useRef<string>(`ctViewerToolGroup-${instanceIdRef.current}`);
   const [loading, setLoading] = useState(true);
   const currentIndexRef = useRef(0);
   const imageIdsRef = useRef<string[]>([]);
@@ -37,10 +47,12 @@ export default function DicomViewport({
   const onSliceChangeRef = useRef(onSliceChange);
   const onWindowChangeRef = useRef(onWindowChange);
   const onImageInfoRef = useRef(onImageInfo);
+  const onSliceIndexChangeRef = useRef(onSliceIndexChange);
   const onAxialPositionsReadyRef = useRef(onAxialPositionsReady);
   onSliceChangeRef.current = onSliceChange;
   onWindowChangeRef.current = onWindowChange;
   onImageInfoRef.current = onImageInfo;
+  onSliceIndexChangeRef.current = onSliceIndexChange;
   onAxialPositionsReadyRef.current = onAxialPositionsReady;
 
   // Helper: get position for current slice
@@ -57,8 +69,7 @@ export default function DicomViewport({
     setLoading(true);
 
     const cs = await import("@cornerstonejs/core");
-    const csTools = await import("@cornerstonejs/tools");
-    const { initCornerstone, createToolGroup, TOOL_GROUP_ID } = await import(
+    const { initCornerstone, createToolGroup } = await import(
       "@/lib/cornerstone/init"
     );
     const { getImageId } = await import(
@@ -82,7 +93,7 @@ export default function DicomViewport({
       }
     }
 
-    const engineId = "ctEngine";
+    const engineId = `ctEngine-${instanceIdRef.current}`;
     const renderingEngine = new cs.RenderingEngine(engineId);
     renderingEngineRef.current = renderingEngine;
 
@@ -99,7 +110,7 @@ export default function DicomViewport({
     ) as InstanceType<typeof cs.StackViewport>;
 
     // Set up tool group
-    const toolGroup = createToolGroup();
+    const toolGroup = createToolGroup(toolGroupIdRef.current);
     if (toolGroup) {
       toolGroup.addViewport(viewportIdRef.current, engineId);
     }
@@ -123,6 +134,7 @@ export default function DicomViewport({
     // Report initial slice with position
     const initialPos = await getPositionForIndex(0);
     onSliceChangeRef.current(1, imageIds.length, initialPos);
+    onSliceIndexChangeRef.current?.(0, imageIds.length, initialPos);
 
     // Listen for errors
     const element = containerRef.current;
@@ -161,6 +173,7 @@ export default function DicomViewport({
       currentIndexRef.current = after;
       const pos = await getPositionForIndex(after);
       onSliceChangeRef.current(after + 1, imageIds.length, pos);
+      onSliceIndexChangeRef.current?.(after, imageIds.length, pos);
     };
 
     element.addEventListener("wheel", handleWheel, { passive: false });
@@ -209,6 +222,7 @@ export default function DicomViewport({
   }, [series, getPositionForIndex]);
 
   useEffect(() => {
+    const toolGroupId = toolGroupIdRef.current;
     let cleanup: (() => void) | undefined;
     setupViewport().then((fn) => {
       cleanup = fn;
@@ -224,6 +238,9 @@ export default function DicomViewport({
         }
         renderingEngineRef.current = null;
       }
+      import("@/lib/cornerstone/init").then(({ destroyToolGroup }) => {
+        destroyToolGroup(toolGroupId);
+      });
     };
   }, [setupViewport]);
 
@@ -232,8 +249,9 @@ export default function DicomViewport({
     if (jumpToSliceIndex == null || !renderingEngineRef.current) return;
 
     const jump = async () => {
-      const cs = await import("@cornerstonejs/core");
-      const engine = renderingEngineRef.current as InstanceType<typeof cs.RenderingEngine>;
+      const engine = renderingEngineRef.current as {
+        getViewport: (id: string) => unknown;
+      };
       const viewport = engine.getViewport(viewportIdRef.current) as unknown as {
         setImageIdIndex: (index: number) => Promise<void>;
         getCurrentImageIdIndex: () => number;
@@ -246,6 +264,7 @@ export default function DicomViewport({
       const pos = await getPositionForIndex(jumpToSliceIndex);
       const total = imageIdsRef.current.length;
       onSliceChangeRef.current(jumpToSliceIndex + 1, total, pos);
+      onSliceIndexChangeRef.current?.(jumpToSliceIndex, total, pos);
     };
     jump();
   }, [jumpToSliceIndex, getPositionForIndex]);
@@ -254,8 +273,7 @@ export default function DicomViewport({
   useEffect(() => {
     const updateTool = async () => {
       const csTools = await import("@cornerstonejs/tools");
-      const { TOOL_GROUP_ID } = await import("@/lib/cornerstone/init");
-      const toolGroup = csTools.ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+      const toolGroup = csTools.ToolGroupManager.getToolGroup(toolGroupIdRef.current);
       if (!toolGroup) return;
 
       const toolNames = [
@@ -286,11 +304,10 @@ export default function DicomViewport({
   useEffect(() => {
     if (!activePreset || !renderingEngineRef.current) return;
 
-    const applyPreset = async () => {
-      const cs = await import("@cornerstonejs/core");
-      const engine = renderingEngineRef.current as InstanceType<
-        typeof cs.RenderingEngine
-      >;
+    const applyPreset = () => {
+      const engine = renderingEngineRef.current as {
+        getViewport: (id: string) => unknown;
+      };
       const viewport = engine.getViewport(viewportIdRef.current) as unknown as {
         setProperties: (props: Record<string, unknown>) => void;
         render: () => void;
@@ -307,6 +324,31 @@ export default function DicomViewport({
     };
     applyPreset();
   }, [activePreset]);
+
+  // Apply forced WW/WC when externally synced
+  useEffect(() => {
+    if (!forcedWindow || !renderingEngineRef.current) return;
+
+    const applyWindow = () => {
+      const engine = renderingEngineRef.current as {
+        getViewport: (id: string) => unknown;
+      };
+      const viewport = engine.getViewport(viewportIdRef.current) as unknown as {
+        setProperties: (props: Record<string, unknown>) => void;
+        render: () => void;
+      };
+      if (!viewport) return;
+
+      const lower = forcedWindow.center - forcedWindow.width / 2;
+      const upper = forcedWindow.center + forcedWindow.width / 2;
+      viewport.setProperties({
+        voiRange: { lower, upper },
+      });
+      viewport.render();
+    };
+
+    applyWindow();
+  }, [forcedWindow]);
 
   return (
     <div className="relative flex-1 bg-black">

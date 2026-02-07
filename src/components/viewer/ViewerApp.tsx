@@ -2,13 +2,15 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import type { StudyTree, Series } from "@/lib/dicom/types";
+import type { StudyTree, Series, Study } from "@/lib/dicom/types";
 import type { WindowPreset } from "@/lib/cornerstone/presets";
 import { CT_PRESETS } from "@/lib/cornerstone/presets";
 import { registerFiles, clearFiles } from "@/lib/dicom/file-manager";
 import { parseDicomdirFromFiles } from "@/lib/dicom/parse-dicomdir";
 import { parseFilesWithoutDicomdir } from "@/lib/dicom/parse-files";
 import { findTopogramSeries } from "@/lib/dicom/topogram-utils";
+import { findNearestSliceByPosition, mapByRelativeIndex } from "@/lib/dicom/slice-sync";
+import { FEATURES } from "@/lib/features";
 import {
   findMatchingRecent,
   listRecentDirectories,
@@ -33,6 +35,7 @@ import DicomViewport from "./DicomViewport";
 import TopogramPanel from "./TopogramPanel";
 import PanelActivityBar from "./PanelActivityBar";
 import PanelContainer from "./PanelContainer";
+import ComparePanel from "./ComparePanel";
 
 function isPermissionDeniedError(error: unknown): boolean {
   if (error instanceof DOMException) {
@@ -80,7 +83,7 @@ export default function ViewerApp() {
   const [pickerBusy, setPickerBusy] = useState(false);
   const directoryPickerPromiseRef = useRef<Promise<void> | null>(null);
 
-  // Slice/window state for status bar
+  // Slice/window state for status bar (primary viewport)
   const [currentSlice, setCurrentSlice] = useState(0);
   const [totalSlices, setTotalSlices] = useState(0);
   const [windowWidth, setWindowWidth] = useState(400);
@@ -88,14 +91,22 @@ export default function ViewerApp() {
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
 
-  // Topogram state
+  // Topogram state (primary series)
   const [currentSlicePosition, setCurrentSlicePosition] = useState<number[] | null>(null);
   const [axialSlicePositions, setAxialSlicePositions] = useState<(number[] | null)[] | null>(null);
   const [jumpToSliceIndex, setJumpToSliceIndex] = useState<number | null>(null);
 
+  // Compare state
+  const [compareSeries, setCompareSeries] = useState<Series | null>(null);
+  const [compareCurrentSlice, setCompareCurrentSlice] = useState(0);
+  const [compareTotalSlices, setCompareTotalSlices] = useState(0);
+  const [compareAxialSlicePositions, setCompareAxialSlicePositions] = useState<(number[] | null)[] | null>(null);
+  const [jumpToCompareSliceIndex, setJumpToCompareSliceIndex] = useState<number | null>(null);
+
   // Panel manager state
-  const [activePanelId, setActivePanelId] = useState<string | null>(null);
-  const [panelWidth, setPanelWidth] = useState(200);
+  const [openPanelIds, setOpenPanelIds] = useState<Set<string>>(new Set());
+  const [topogramPanelWidth, setTopogramPanelWidth] = useState(200);
+  const [comparePanelWidth, setComparePanelWidth] = useState(320);
 
   const refreshRecentDirectories = useCallback(async () => {
     if (!isFileSystemAccessSupported()) {
@@ -403,26 +414,45 @@ export default function ViewerApp() {
     };
   }, [openDirectoryHandle, refreshRecentDirectories]);
 
+  const activeStudy = useMemo<Study | null>(() => {
+    if (!studyTree || !activeSeries) return null;
+    return (
+      studyTree.studies.find((study) =>
+        study.series.some((series) => series.seriesInstanceUID === activeSeries.seriesInstanceUID)
+      ) || null
+    );
+  }, [studyTree, activeSeries]);
+
+  const compareStudy = useMemo<Study | null>(() => {
+    if (!studyTree || !compareSeries) return null;
+    return (
+      studyTree.studies.find((study) =>
+        study.series.some((series) => series.seriesInstanceUID === compareSeries.seriesInstanceUID)
+      ) || null
+    );
+  }, [studyTree, compareSeries]);
+
   // Find topogram series for the active series' study
   const topogramSeries = useMemo(() => {
-    if (!activeSeries || !studyTree) return null;
+    if (!activeSeries || !activeStudy) return null;
 
-    const study = studyTree.studies.find((s) =>
-      s.series.some((ser) => ser.seriesInstanceUID === activeSeries.seriesInstanceUID)
-    );
-    if (!study) return null;
-
-    const topo = findTopogramSeries(study);
+    const topo = findTopogramSeries(activeStudy);
     if (topo && topo.seriesInstanceUID === activeSeries.seriesInstanceUID) return null;
 
     return topo;
-  }, [activeSeries, studyTree]);
+  }, [activeSeries, activeStudy]);
 
-  // Reset topogram state when active series changes
+  // Reset topogram/compare state when active series changes
   useEffect(() => {
     setCurrentSlicePosition(null);
     setAxialSlicePositions(null);
     setJumpToSliceIndex(null);
+
+    setCompareSeries(null);
+    setCompareCurrentSlice(0);
+    setCompareTotalSlices(0);
+    setCompareAxialSlicePositions(null);
+    setJumpToCompareSliceIndex(null);
   }, [activeSeries]);
 
   // Auto-open topogram panel when it becomes available, auto-close when it doesn't
@@ -433,16 +463,35 @@ export default function ViewerApp() {
     prevTopogramRef.current = topogramSeries;
 
     if (!hadTopogram && hasTopogram) {
-      setActivePanelId("topogram");
+      setOpenPanelIds((prev) => {
+        const next = new Set(prev);
+        next.add("topogram");
+        return next;
+      });
     }
     if (hadTopogram && !hasTopogram) {
-      setActivePanelId((prev) => (prev === "topogram" ? null : prev));
+      setOpenPanelIds((prev) => {
+        const next = new Set(prev);
+        next.delete("topogram");
+        return next;
+      });
     }
   }, [topogramSeries]);
 
   const handlePanelToggle = useCallback((id: string) => {
-    setActivePanelId((prev) => (prev === id ? null : id));
+    setOpenPanelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
   }, []);
+
+  const comparePanelOpen = FEATURES.compareViewer && openPanelIds.has("compare");
+  const compareEnabled = comparePanelOpen && !!compareSeries;
 
   const panels = useMemo(
     () => [
@@ -451,25 +500,44 @@ export default function ViewerApp() {
         title: "Topogram",
         available: !!topogramSeries,
         icon: (
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="6" y="2" width="12" height="20" rx="2" />
-            <line x1="6" y1="12" x2="18" y2="12" strokeWidth="2" stroke="currentColor" />
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <rect x="3.5" y="5" width="17" height="14" rx="2" />
+            <line x1="6.5" y1="9" x2="17.5" y2="9" />
+            <line x1="6.5" y1="15" x2="17.5" y2="15" />
+            <line x1="12" y1="5" x2="12" y2="19" />
+          </svg>
+        ),
+      },
+      {
+        id: "compare",
+        title: "Compare",
+        available: FEATURES.compareViewer && !!activeSeries,
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <rect x="3.5" y="4.5" width="7.5" height="15" rx="1.8" />
+            <rect x="13" y="4.5" width="7.5" height="15" rx="1.8" />
+            <path d="M10 9h4" />
+            <path d="M10 15h4" />
           </svg>
         ),
       },
     ],
-    [topogramSeries]
+    [topogramSeries, activeSeries]
   );
 
   const handleOpenNew = useCallback(() => {
     clearFiles();
     setStudyTree(null);
     setActiveSeries(null);
+    setCompareSeries(null);
+    setOpenPanelIds(new Set());
   }, []);
 
   const handlePresetChange = useCallback((preset: WindowPreset) => {
     setActivePreset(preset);
     setPresetTrigger(preset);
+    setWindowWidth(preset.windowWidth);
+    setWindowCenter(preset.windowCenter);
   }, []);
 
   const handleSliceChange = useCallback((current: number, total: number, position: number[] | null) => {
@@ -479,8 +547,8 @@ export default function ViewerApp() {
   }, []);
 
   const handleWindowChange = useCallback((ww: number, wc: number) => {
-    setWindowWidth(ww);
-    setWindowCenter(wc);
+    setWindowWidth((prev) => (Math.abs(prev - ww) < 0.5 ? prev : ww));
+    setWindowCenter((prev) => (Math.abs(prev - wc) < 0.5 ? prev : wc));
   }, []);
 
   const handleImageInfo = useCallback((w: number, h: number) => {
@@ -492,9 +560,55 @@ export default function ViewerApp() {
     setAxialSlicePositions(positions);
   }, []);
 
+  const handleCompareAxialPositionsReady = useCallback((positions: (number[] | null)[]) => {
+    setCompareAxialSlicePositions(positions);
+  }, []);
+
   const handleJumpToSlice = useCallback((index: number) => {
     setJumpToSliceIndex(index);
   }, []);
+
+  const handlePrimarySliceIndexChange = useCallback(
+    (index: number, total: number, position: number[] | null) => {
+      if (!compareEnabled || !compareSeries) return;
+
+      let mappedIndex: number | null = null;
+      if (compareAxialSlicePositions && compareAxialSlicePositions.length > 0) {
+        mappedIndex = findNearestSliceByPosition(position, compareAxialSlicePositions);
+      }
+
+      if (mappedIndex == null) {
+        mappedIndex = mapByRelativeIndex(index, total, compareSeries.instances.length);
+      }
+
+      setJumpToCompareSliceIndex(mappedIndex);
+    },
+    [compareEnabled, compareSeries, compareAxialSlicePositions]
+  );
+
+  const handleCompareSliceChange = useCallback((current: number, total: number) => {
+    setCompareCurrentSlice(current);
+    setCompareTotalSlices(total);
+  }, []);
+
+  const handleSelectCompareSeries = useCallback((series: Series) => {
+    setCompareSeries(series);
+    setCompareAxialSlicePositions(null);
+    setJumpToCompareSliceIndex(0);
+  }, []);
+
+  const handleClearCompareSeries = useCallback(() => {
+    setCompareSeries(null);
+    setCompareCurrentSlice(0);
+    setCompareTotalSlices(0);
+    setCompareAxialSlicePositions(null);
+    setJumpToCompareSliceIndex(null);
+  }, []);
+
+  const syncedWindow = useMemo(
+    () => ({ width: windowWidth, center: windowCenter }),
+    [windowWidth, windowCenter]
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -600,14 +714,14 @@ export default function ViewerApp() {
               <div className="flex flex-1 overflow-hidden">
                 <PanelActivityBar
                   panels={panels}
-                  activePanelId={activePanelId}
+                  activePanelIds={openPanelIds}
                   onPanelToggle={handlePanelToggle}
                 />
-                {activePanelId === "topogram" && topogramSeries && (
+                {openPanelIds.has("topogram") && topogramSeries && (
                   <PanelContainer
                     title="Topogram"
-                    width={panelWidth}
-                    onWidthChange={setPanelWidth}
+                    width={topogramPanelWidth}
+                    onWidthChange={setTopogramPanelWidth}
                   >
                     <TopogramPanel
                       series={topogramSeries}
@@ -617,16 +731,83 @@ export default function ViewerApp() {
                     />
                   </PanelContainer>
                 )}
-                <DicomViewport
-                  series={activeSeries}
-                  activeTool={activeTool}
-                  activePreset={presetTrigger}
-                  onSliceChange={handleSliceChange}
-                  onWindowChange={handleWindowChange}
-                  onImageInfo={handleImageInfo}
-                  onAxialPositionsReady={handleAxialPositionsReady}
-                  jumpToSliceIndex={jumpToSliceIndex}
-                />
+
+                {FEATURES.compareViewer && openPanelIds.has("compare") && (
+                  <PanelContainer
+                    title="Compare"
+                    width={comparePanelWidth}
+                    onWidthChange={setComparePanelWidth}
+                  >
+                    <ComparePanel
+                      studyTree={studyTree}
+                      activeSeries={activeSeries}
+                      selectedCompareSeries={compareSeries}
+                      onSelectCompareSeries={handleSelectCompareSeries}
+                      onClearCompareSeries={handleClearCompareSeries}
+                    />
+                  </PanelContainer>
+                )}
+
+                {compareEnabled && compareSeries ? (
+                  <div className="grid flex-1 grid-cols-2 overflow-hidden">
+                    <div className="flex min-w-0 flex-col border-r border-border">
+                      <div className="flex h-8 items-center justify-between border-b border-border px-3 text-[11px] text-muted">
+                        <span className="uppercase tracking-widest">Prior</span>
+                        <span>
+                          {compareStudy?.studyDate ? formatDate(compareStudy.studyDate) : ""}
+                          {compareTotalSlices > 0 ? ` · ${compareCurrentSlice}/${compareTotalSlices}` : ""}
+                        </span>
+                      </div>
+                      <DicomViewport
+                        viewportKey="compare"
+                        series={compareSeries}
+                        activeTool={activeTool}
+                        activePreset={presetTrigger}
+                        onSliceChange={handleCompareSliceChange}
+                        onWindowChange={handleWindowChange}
+                        onImageInfo={() => {
+                          // Primary viewport owns status bar dimensions.
+                        }}
+                        onAxialPositionsReady={handleCompareAxialPositionsReady}
+                        jumpToSliceIndex={jumpToCompareSliceIndex}
+                        forcedWindow={syncedWindow}
+                      />
+                    </div>
+                    <div className="flex min-w-0 flex-col">
+                      <div className="flex h-8 items-center justify-between border-b border-border px-3 text-[11px] text-muted">
+                        <span className="uppercase tracking-widest">Current</span>
+                        <span>{activeStudy?.studyDate ? formatDate(activeStudy.studyDate) : ""}</span>
+                      </div>
+                      <DicomViewport
+                        viewportKey="primary"
+                        series={activeSeries}
+                        activeTool={activeTool}
+                        activePreset={presetTrigger}
+                        onSliceChange={handleSliceChange}
+                        onSliceIndexChange={handlePrimarySliceIndexChange}
+                        onWindowChange={handleWindowChange}
+                        onImageInfo={handleImageInfo}
+                        onAxialPositionsReady={handleAxialPositionsReady}
+                        jumpToSliceIndex={jumpToSliceIndex}
+                        forcedWindow={syncedWindow}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <DicomViewport
+                    viewportKey="primary"
+                    series={activeSeries}
+                    activeTool={activeTool}
+                    activePreset={presetTrigger}
+                    onSliceChange={handleSliceChange}
+                    onSliceIndexChange={handlePrimarySliceIndexChange}
+                    onWindowChange={handleWindowChange}
+                    onImageInfo={handleImageInfo}
+                    onAxialPositionsReady={handleAxialPositionsReady}
+                    jumpToSliceIndex={jumpToSliceIndex}
+                    forcedWindow={syncedWindow}
+                  />
+                )}
               </div>
               <StatusBar
                 currentSlice={currentSlice}
@@ -646,4 +827,9 @@ export default function ViewerApp() {
       </div>
     </div>
   );
+}
+
+function formatDate(dicomDate: string): string {
+  if (dicomDate.length !== 8) return dicomDate;
+  return `${dicomDate.slice(0, 4)}-${dicomDate.slice(4, 6)}-${dicomDate.slice(6, 8)}`;
 }

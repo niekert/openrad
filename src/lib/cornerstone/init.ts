@@ -14,8 +14,6 @@ const {
 
 let initialized = false;
 
-export const TOOL_GROUP_ID = "ctViewerToolGroup";
-
 export async function initCornerstone(): Promise<void> {
   if (initialized) return;
 
@@ -37,13 +35,13 @@ export async function initCornerstone(): Promise<void> {
   initialized = true;
 }
 
-export function createToolGroup(): cornerstoneTools.Types.IToolGroup | undefined {
-  const existing = ToolGroupManager.getToolGroup(TOOL_GROUP_ID);
+export function createToolGroup(toolGroupId: string): cornerstoneTools.Types.IToolGroup | undefined {
+  const existing = ToolGroupManager.getToolGroup(toolGroupId);
   if (existing) {
-    ToolGroupManager.destroyToolGroup(TOOL_GROUP_ID);
+    ToolGroupManager.destroyToolGroup(toolGroupId);
   }
 
-  const toolGroup = ToolGroupManager.createToolGroup(TOOL_GROUP_ID);
+  const toolGroup = ToolGroupManager.createToolGroup(toolGroupId);
   if (!toolGroup) return undefined;
 
   toolGroup.addTool(WindowLevelTool.toolName);
@@ -65,4 +63,11 @@ export function createToolGroup(): cornerstoneTools.Types.IToolGroup | undefined
   toolGroup.setToolEnabled(StackScrollTool.toolName);
 
   return toolGroup;
+}
+
+export function destroyToolGroup(toolGroupId: string): void {
+  const existing = ToolGroupManager.getToolGroup(toolGroupId);
+  if (existing) {
+    ToolGroupManager.destroyToolGroup(toolGroupId);
+  }
 }

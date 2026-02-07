@@ -106,9 +106,10 @@ export default function TopogramPanel({
       return;
     }
 
-    const updateLine = async () => {
-      const cs = await import("@cornerstonejs/core");
-      const viewport = viewportRef.current as InstanceType<typeof cs.StackViewport>;
+    const updateLine = () => {
+      const viewport = viewportRef.current as {
+        worldToCanvas: (point: [number, number, number]) => [number, number];
+      };
       if (!viewport) return;
 
       try {
@@ -146,9 +147,12 @@ export default function TopogramPanel({
     const observer = new ResizeObserver(() => {
       if (!viewportRef.current || !containerRef.current) return;
 
-      const onResize = async () => {
-        const cs = await import("@cornerstonejs/core");
-        const viewport = viewportRef.current as InstanceType<typeof cs.StackViewport>;
+      const onResize = () => {
+        const viewport = viewportRef.current as {
+          resetCamera: () => void;
+          render: () => void;
+          worldToCanvas: (point: [number, number, number]) => [number, number];
+        };
         if (!viewport) return;
 
         // Resize canvas and re-fit image
@@ -188,11 +192,12 @@ export default function TopogramPanel({
 
   // Click handler: click on topogram to jump to slice
   const handleClick = useCallback(
-    async (e: React.MouseEvent<HTMLDivElement>) => {
+    (e: React.MouseEvent<HTMLDivElement>) => {
       if (!viewportRef.current || !axialSlicePositions || !containerRef.current) return;
 
-      const cs = await import("@cornerstonejs/core");
-      const viewport = viewportRef.current as InstanceType<typeof cs.StackViewport>;
+      const viewport = viewportRef.current as {
+        canvasToWorld: (point: [number, number]) => [number, number, number];
+      };
 
       const rect = containerRef.current.getBoundingClientRect();
       const canvasX = rect.width / 2;

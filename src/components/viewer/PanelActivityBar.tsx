@@ -9,13 +9,13 @@ interface PanelDef {
 
 interface PanelActivityBarProps {
   panels: PanelDef[];
-  activePanelId: string | null;
+  activePanelIds: Set<string>;
   onPanelToggle: (panelId: string) => void;
 }
 
 export default function PanelActivityBar({
   panels,
-  activePanelId,
+  activePanelIds,
   onPanelToggle,
 }: PanelActivityBarProps) {
   const visiblePanels = panels.filter((p) => p.available);
@@ -25,7 +25,7 @@ export default function PanelActivityBar({
   return (
     <div className="flex h-full w-10 flex-shrink-0 flex-col items-center gap-1 border-r border-border pt-2">
       {visiblePanels.map((panel) => {
-        const isActive = activePanelId === panel.id;
+        const isActive = activePanelIds.has(panel.id);
         return (
           <button
             key={panel.id}

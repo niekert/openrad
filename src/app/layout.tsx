@@ -18,6 +18,9 @@ export const metadata: Metadata = {
     "DICOM CD viewer",
     "radiology viewer",
   ],
+  verification: {
+    google: "8GG_Gw0npilqZ8NbLSdZe-rOtjPwlxjm8P8j2X7yzl0",
+  },
   openGraph: {
     title: "openrad — View Medical Images in Your Browser",
     description:

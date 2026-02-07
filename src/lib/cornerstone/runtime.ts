@@ -66,8 +66,11 @@ interface MountedViewport {
   element: HTMLDivElement;
   toolGroup: ToolTypes.IToolGroup;
   imageIds: string[];
+  currentLoadVersion: number;
   cleanupListeners: () => void;
 }
+
+const PRELOAD_IMAGE_LIMIT = 120;
 
 let initialized = false;
 let initPromise: Promise<void> | null = null;
@@ -313,6 +316,7 @@ export class CornerstoneViewportRuntime {
       element,
       toolGroup,
       imageIds: [],
+      currentLoadVersion: 0,
       cleanupListeners: () => {
         element.removeEventListener(
           CoreEnums.Events.STACK_NEW_IMAGE,
@@ -348,7 +352,15 @@ export class CornerstoneViewportRuntime {
     series: Series | null,
   ): Promise<void> {
     const mounted = this.mounted.get(viewportId);
-    if (!mounted || !series) {
+    if (!mounted) {
+      return;
+    }
+
+    mounted.currentLoadVersion += 1;
+    const loadVersion = mounted.currentLoadVersion;
+
+    if (!series) {
+      mounted.imageIds = [];
       return;
     }
 
@@ -363,6 +375,9 @@ export class CornerstoneViewportRuntime {
     }
 
     await stackViewport.setStack(imageIds, 0);
+    if (!this.isLatestLoad(viewportId, loadVersion)) {
+      return;
+    }
 
     const imageData = stackViewport.getImageData();
     const dimensions = imageData.dimensions;
@@ -371,13 +386,10 @@ export class CornerstoneViewportRuntime {
     const firstPosition = getPosition(imageIds[0]);
     this.callbacks.onSliceChange(viewportId, 0, imageIds.length, firstPosition);
 
-    const preloadPromises = imageIds.map((imageId) =>
-      imageLoader.loadAndCacheImage(imageId),
-    );
-    await Promise.allSettled(preloadPromises);
-
     const positions = imageIds.map((imageId) => getPosition(imageId));
     this.callbacks.onAxialPositionsReady(viewportId, positions);
+
+    void this.preloadSeriesImages(viewportId, loadVersion, imageIds);
   }
 
   setTool(tool: ViewerToolName): void {
@@ -430,5 +442,32 @@ export class CornerstoneViewportRuntime {
 
   hasMountedViewport(viewportId: RuntimeViewportId): boolean {
     return this.mounted.has(viewportId);
+  }
+
+  private isLatestLoad(viewportId: RuntimeViewportId, loadVersion: number): boolean {
+    const mounted = this.mounted.get(viewportId);
+    return !!mounted && mounted.currentLoadVersion === loadVersion;
+  }
+
+  private async preloadSeriesImages(
+    viewportId: RuntimeViewportId,
+    loadVersion: number,
+    imageIds: string[],
+  ): Promise<void> {
+    const limitedImageIds = imageIds.slice(0, PRELOAD_IMAGE_LIMIT);
+    for (const imageId of limitedImageIds) {
+      if (!this.isLatestLoad(viewportId, loadVersion)) {
+        return;
+      }
+      try {
+        await imageLoader.loadAndCacheImage(imageId);
+      } catch (error: unknown) {
+        log.warn("preload failed", {
+          viewportId,
+          imageId,
+          error: error instanceof Error ? error.message : "unknown",
+        });
+      }
+    }
   }
 }

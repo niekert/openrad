@@ -23,13 +23,38 @@ const features = [
   {
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+        <rect x="2" y="3" width="8" height="18" rx="1" />
+        <rect x="14" y="3" width="8" height="18" rx="1" />
       </svg>
     ),
-    title: "Powerful",
+    title: "Side-by-Side Compare",
     description:
-      "Window/level presets, measurements, zoom, pan, and smooth scrolling through hundreds of slices.",
+      "Compare prior and current studies side by side with synchronized scrolling and linked window/level.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M3 3h18v18H3z" />
+        <path d="M3 12h18" strokeDasharray="2 2" />
+        <path d="M12 3v18" strokeDasharray="2 2" />
+        <circle cx="12" cy="8" r="1.5" fill="currentColor" stroke="none" />
+      </svg>
+    ),
+    title: "Topogram Navigation",
+    description:
+      "Click anywhere on the scout image to jump to that slice instantly. Navigate large series with ease.",
+  },
+  {
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+        <path d="M8 10h8M8 14h4" />
+      </svg>
+    ),
+    title: "AI Chat",
+    badge: "Coming Soon",
+    description:
+      "Ask questions about your scans using AI — get explanations, measurements, and insights without leaving the viewer.",
   },
   {
     icon: (
@@ -52,7 +77,7 @@ export default function Features() {
         <h2 className="mb-10 text-center text-sm font-semibold uppercase tracking-widest text-muted font-mono">
           Features
         </h2>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((f) => (
             <div
               key={f.title}
@@ -61,7 +86,14 @@ export default function Features() {
               <div className="mb-4 inline-flex items-center justify-center rounded-lg bg-accent-dim p-2.5 text-accent">
                 {f.icon}
               </div>
-              <h3 className="text-lg font-semibold font-mono">{f.title}</h3>
+              <h3 className="text-lg font-semibold font-mono">
+                {f.title}
+                {"badge" in f && f.badge && (
+                  <span className="ml-2 inline-flex items-center rounded-full border border-accent/30 bg-accent-dim px-2 py-0.5 text-[10px] font-medium text-accent align-middle">
+                    {f.badge}
+                  </span>
+                )}
+              </h3>
               <p className="mt-2 text-sm leading-relaxed text-muted">
                 {f.description}
               </p>

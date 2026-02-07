@@ -84,8 +84,8 @@ export default function Hero() {
           <Image
             src="/screenshot.jpg"
             alt="OpenRad viewer showing a CT scan"
-            width={1280}
-            height={800}
+            width={2560}
+            height={1600}
             className="w-full h-auto"
             priority
           />

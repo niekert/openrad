@@ -1,3 +1,5 @@
+import { getFileRelativePath } from "./file-path";
+
 const fileRegistry = new Map<string, File>();
 
 export function registerFile(key: string, file: File): void {
@@ -18,7 +20,7 @@ export function generateFileKey(relativePath: string): string {
 
 export function registerFiles(files: File[]): void {
   for (const file of files) {
-    const path = file.webkitRelativePath || file.name;
+    const path = getFileRelativePath(file);
     const key = generateFileKey(path);
     registerFile(key, file);
   }

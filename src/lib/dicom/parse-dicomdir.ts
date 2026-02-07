@@ -1,6 +1,7 @@
 import dicomParser from "dicom-parser";
 import type { StudyTree, Study, Series, Instance } from "./types";
 import { generateFileKey, getFile } from "./file-manager";
+import { getFileRelativePath } from "./file-path";
 
 function getString(
   dataset: dicomParser.DataSet,
@@ -21,7 +22,7 @@ function getInt(
 export function findDicomdir(files: File[]): File | null {
   return (
     files.find((f) => {
-      const name = (f.webkitRelativePath || f.name).split("/").pop() || "";
+      const name = getFileRelativePath(f).split("/").pop() || "";
       return name.toUpperCase() === "DICOMDIR";
     }) || null
   );
@@ -138,7 +139,7 @@ export async function parseDicomdirFromFiles(
   const dicomdirFile = findDicomdir(files);
   if (!dicomdirFile) return null;
 
-  const dicomdirPath = dicomdirFile.webkitRelativePath || dicomdirFile.name;
+  const dicomdirPath = getFileRelativePath(dicomdirFile);
   const parts = dicomdirPath.split("/");
   const rootPrefix = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
 

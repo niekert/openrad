@@ -1,6 +1,7 @@
 import dicomParser from "dicom-parser";
 import type { StudyTree, Study, Series, Instance } from "./types";
 import { generateFileKey } from "./file-manager";
+import { getFileRelativePath } from "./file-path";
 
 async function isDicomFile(file: File): Promise<boolean> {
   if (file.size < 132) return false;
@@ -84,7 +85,7 @@ export async function parseFilesWithoutDicomdir(
         const header = await parseHeader(file);
         if (!header) return;
 
-        const path = file.webkitRelativePath || file.name;
+        const path = getFileRelativePath(file);
         const fileKey = generateFileKey(path);
 
         // Ensure study exists

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local workspace snapshots should not be linted.
+    ".worktrees/**",
   ]),
 ]);
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
 import type { StudyTree, Series } from "@/lib/dicom/types";
 import type { WindowPreset } from "@/lib/cornerstone/presets";
 import { CT_PRESETS } from "@/lib/cornerstone/presets";
@@ -8,6 +9,22 @@ import { registerFiles, clearFiles } from "@/lib/dicom/file-manager";
 import { parseDicomdirFromFiles } from "@/lib/dicom/parse-dicomdir";
 import { parseFilesWithoutDicomdir } from "@/lib/dicom/parse-files";
 import { findTopogramSeries } from "@/lib/dicom/topogram-utils";
+import {
+  findMatchingRecent,
+  listRecentDirectories,
+  markRecentDirectoryStatus,
+  removeRecentDirectory,
+  saveRecentDirectory,
+  touchRecentDirectory,
+  type RecentDirectoryEntry,
+} from "@/lib/filesystem/persistent-directories";
+import {
+  isFileSystemAccessSupported,
+  pickDirectory,
+  queryReadPermission,
+  readAllFilesFromDirectory,
+  requestReadPermission,
+} from "@/lib/filesystem/directory-reader";
 import FileDropZone from "./FileDropZone";
 import StudyBrowser from "./StudyBrowser";
 import Toolbar, { type ToolName } from "./Toolbar";
@@ -16,7 +33,14 @@ import DicomViewport from "./DicomViewport";
 import TopogramPanel from "./TopogramPanel";
 import PanelActivityBar from "./PanelActivityBar";
 import PanelContainer from "./PanelContainer";
-import Link from "next/link";
+
+function isPermissionDeniedError(error: unknown): boolean {
+  if (error instanceof DOMException) {
+    return error.name === "NotAllowedError" || error.name === "SecurityError";
+  }
+
+  return error instanceof Error && error.message === "permission-denied";
+}
 
 export default function ViewerApp() {
   const [studyTree, setStudyTree] = useState<StudyTree | null>(null);
@@ -29,6 +53,11 @@ export default function ViewerApp() {
     done: number;
     total: number;
   } | null>(null);
+  const [bootstrapping, setBootstrapping] = useState(true);
+  const [fsApiSupported, setFsApiSupported] = useState(false);
+  const [recentDirectories, setRecentDirectories] = useState<RecentDirectoryEntry[]>([]);
+  const [activeRecentId, setActiveRecentId] = useState<string | null>(null);
+  const [reconnectTargetId, setReconnectTargetId] = useState<string | null>(null);
 
   // Slice/window state for status bar
   const [currentSlice, setCurrentSlice] = useState(0);
@@ -47,19 +76,277 @@ export default function ViewerApp() {
   const [activePanelId, setActivePanelId] = useState<string | null>(null);
   const [panelWidth, setPanelWidth] = useState(200);
 
+  const refreshRecentDirectories = useCallback(async () => {
+    if (!isFileSystemAccessSupported()) {
+      setRecentDirectories([]);
+      return;
+    }
+
+    const recents = await listRecentDirectories();
+    setRecentDirectories(recents);
+  }, []);
+
+  const parseAndLoadFiles = useCallback(async (files: File[]) => {
+    clearFiles();
+    registerFiles(files);
+
+    let tree = await parseDicomdirFromFiles(files);
+
+    if (!tree || tree.studies.length === 0) {
+      tree = await parseFilesWithoutDicomdir(files, (done, total) => {
+        setProgress({ done, total });
+      });
+    }
+
+    setStudyTree(tree);
+
+    if (tree.studies.length > 0 && tree.studies[0].series.length > 0) {
+      setActiveSeries(tree.studies[0].series[0]);
+    } else {
+      setActiveSeries(null);
+    }
+  }, []);
+
+  const openDirectoryHandle = useCallback(
+    async (
+      handle: FileSystemDirectoryHandle,
+      options: {
+        existingId?: string;
+        requestPermission: boolean;
+        showErrorAlert?: boolean;
+      }
+    ) => {
+      setLoading(true);
+      setProgress(null);
+
+      try {
+        const permission = options.requestPermission
+          ? await requestReadPermission(handle)
+          : await queryReadPermission(handle);
+
+        if (permission !== "granted") {
+          throw new Error("permission-denied");
+        }
+
+        const files = await readAllFilesFromDirectory(handle);
+        if (files.length === 0) {
+          throw new Error("empty-directory");
+        }
+
+        await parseAndLoadFiles(files);
+
+        let savedId = options.existingId;
+        if (savedId) {
+          await touchRecentDirectory(savedId);
+          await markRecentDirectoryStatus(savedId, "ready");
+        } else {
+          const existing = await findMatchingRecent(handle);
+          if (existing) {
+            await touchRecentDirectory(existing.id);
+            await markRecentDirectoryStatus(existing.id, "ready");
+            savedId = existing.id;
+          } else {
+            const created = await saveRecentDirectory(handle);
+            savedId = created.id;
+          }
+        }
+
+        setActiveRecentId(savedId || null);
+        setReconnectTargetId(null);
+        await refreshRecentDirectories();
+      } catch (error) {
+        console.error("Failed to open directory:", error);
+
+        if (options.existingId) {
+          if (isPermissionDeniedError(error)) {
+            await markRecentDirectoryStatus(options.existingId, "needs-permission");
+            setReconnectTargetId(options.existingId);
+          } else {
+            await markRecentDirectoryStatus(options.existingId, "unavailable");
+          }
+          await refreshRecentDirectories();
+        }
+
+        if (options.showErrorAlert !== false) {
+          if (isPermissionDeniedError(error)) {
+            alert("OpenRad needs read access to that folder. Click Reconnect to grant access.");
+          } else if (error instanceof Error && error.message === "empty-directory") {
+            alert("The selected folder does not contain readable files.");
+          } else {
+            alert("Failed to read DICOM files from this folder.");
+          }
+        }
+      } finally {
+        setLoading(false);
+        setProgress(null);
+      }
+    },
+    [parseAndLoadFiles, refreshRecentDirectories]
+  );
+
+  const handleFilesSelected = useCallback(
+    async (files: File[]) => {
+      setLoading(true);
+      setProgress(null);
+
+      try {
+        await parseAndLoadFiles(files);
+      } catch (err) {
+        console.error("Failed to parse DICOM files:", err);
+        alert("Failed to parse DICOM files. Make sure you selected a valid DICOM folder.");
+      } finally {
+        setLoading(false);
+        setProgress(null);
+      }
+    },
+    [parseAndLoadFiles]
+  );
+
+  const handlePickDirectory = useCallback(async () => {
+    if (!fsApiSupported) return;
+
+    try {
+      const handle = await pickDirectory();
+      await openDirectoryHandle(handle, {
+        requestPermission: true,
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return;
+      }
+
+      console.error("Directory picker failed:", error);
+      alert("Failed to open directory picker.");
+    }
+  }, [fsApiSupported, openDirectoryHandle]);
+
+  const handleOpenRecent = useCallback(
+    async (id: string) => {
+      const recent = recentDirectories.find((entry) => entry.id === id);
+      if (!recent) return;
+
+      setActiveRecentId(id);
+
+      try {
+        const permission = await queryReadPermission(recent.handle);
+        if (permission !== "granted") {
+          await markRecentDirectoryStatus(id, "needs-permission");
+          await refreshRecentDirectories();
+          setReconnectTargetId(id);
+          return;
+        }
+
+        await openDirectoryHandle(recent.handle, {
+          existingId: id,
+          requestPermission: false,
+        });
+      } catch (error) {
+        console.error("Failed to open recent folder:", error);
+        await markRecentDirectoryStatus(id, "unavailable");
+        await refreshRecentDirectories();
+        alert("That recent folder is unavailable. Reconnect or remove it.");
+      }
+    },
+    [openDirectoryHandle, recentDirectories, refreshRecentDirectories]
+  );
+
+  const handleReconnectRecent = useCallback(
+    async (id: string) => {
+      const recent = recentDirectories.find((entry) => entry.id === id);
+      if (!recent) return;
+
+      setActiveRecentId(id);
+
+      await openDirectoryHandle(recent.handle, {
+        existingId: id,
+        requestPermission: true,
+      });
+    },
+    [openDirectoryHandle, recentDirectories]
+  );
+
+  const handleRemoveRecent = useCallback(
+    async (id: string) => {
+      await removeRecentDirectory(id);
+      if (activeRecentId === id) {
+        setActiveRecentId(null);
+      }
+      if (reconnectTargetId === id) {
+        setReconnectTargetId(null);
+      }
+      await refreshRecentDirectories();
+    },
+    [activeRecentId, reconnectTargetId, refreshRecentDirectories]
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const bootstrap = async () => {
+      const supported = isFileSystemAccessSupported();
+      if (cancelled) return;
+
+      setFsApiSupported(supported);
+
+      if (!supported) {
+        setBootstrapping(false);
+        return;
+      }
+
+      try {
+        const recents = await listRecentDirectories();
+        if (cancelled) return;
+
+        setRecentDirectories(recents);
+
+        if (recents.length === 0) {
+          setBootstrapping(false);
+          return;
+        }
+
+        const latest = recents[0];
+        setActiveRecentId(latest.id);
+
+        const permission = await queryReadPermission(latest.handle);
+        if (cancelled) return;
+
+        if (permission === "granted") {
+          await openDirectoryHandle(latest.handle, {
+            existingId: latest.id,
+            requestPermission: false,
+            showErrorAlert: false,
+          });
+        } else {
+          await markRecentDirectoryStatus(latest.id, "needs-permission");
+          await refreshRecentDirectories();
+          setReconnectTargetId(latest.id);
+        }
+      } catch (error) {
+        console.error("Failed to restore recent folders:", error);
+      } finally {
+        if (!cancelled) {
+          setBootstrapping(false);
+        }
+      }
+    };
+
+    void bootstrap();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [openDirectoryHandle, refreshRecentDirectories]);
+
   // Find topogram series for the active series' study
   const topogramSeries = useMemo(() => {
     if (!activeSeries || !studyTree) return null;
 
-    // Find which study this series belongs to
     const study = studyTree.studies.find((s) =>
       s.series.some((ser) => ser.seriesInstanceUID === activeSeries.seriesInstanceUID)
     );
     if (!study) return null;
 
     const topo = findTopogramSeries(study);
-
-    // Don't show topogram if the active series IS the topogram
     if (topo && topo.seriesInstanceUID === activeSeries.seriesInstanceUID) return null;
 
     return topo;
@@ -79,11 +366,9 @@ export default function ViewerApp() {
     const hasTopogram = !!topogramSeries;
     prevTopogramRef.current = topogramSeries;
 
-    // Became available → auto-open
     if (!hadTopogram && hasTopogram) {
       setActivePanelId("topogram");
     }
-    // Became unavailable → close if it was showing
     if (hadTopogram && !hasTopogram) {
       setActivePanelId((prev) => (prev === "topogram" ? null : prev));
     }
@@ -109,42 +394,6 @@ export default function ViewerApp() {
     ],
     [topogramSeries]
   );
-
-  const handleFilesSelected = useCallback(async (files: File[]) => {
-    setLoading(true);
-    setProgress(null);
-
-    try {
-      // Register all files in the file manager
-      clearFiles();
-      registerFiles(files);
-
-      // Try DICOMDIR first
-      let tree = await parseDicomdirFromFiles(files);
-
-      if (!tree || tree.studies.length === 0) {
-        // Fallback: scan all files
-        tree = await parseFilesWithoutDicomdir(files, (done, total) => {
-          setProgress({ done, total });
-        });
-      }
-
-      setStudyTree(tree);
-
-      // Auto-select first series if available
-      if (tree.studies.length > 0 && tree.studies[0].series.length > 0) {
-        setActiveSeries(tree.studies[0].series[0]);
-      }
-    } catch (err) {
-      console.error("Failed to parse DICOM files:", err);
-      alert(
-        "Failed to parse DICOM files. Make sure you selected a valid DICOM folder."
-      );
-    } finally {
-      setLoading(false);
-      setProgress(null);
-    }
-  }, []);
 
   const handleOpenNew = useCallback(() => {
     clearFiles();
@@ -178,14 +427,12 @@ export default function ViewerApp() {
   }, []);
 
   const handleJumpToSlice = useCallback((index: number) => {
-    // Use a new object wrapper to ensure the effect triggers even for same index
     setJumpToSliceIndex(index);
   }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      // Number keys for presets
       const num = parseInt(e.key);
       if (num >= 1 && num <= CT_PRESETS.length) {
         handlePresetChange(CT_PRESETS[num - 1]);
@@ -212,7 +459,6 @@ export default function ViewerApp() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [handlePresetChange]);
 
-  // No files loaded yet — show drop zone
   if (!studyTree) {
     return (
       <div className="flex h-screen flex-col">
@@ -224,22 +470,31 @@ export default function ViewerApp() {
         </header>
         <FileDropZone
           onFilesSelected={handleFilesSelected}
-          loading={loading}
+          onPickDirectory={handlePickDirectory}
+          onOpenRecent={handleOpenRecent}
+          onReconnectRecent={handleReconnectRecent}
+          onRemoveRecent={handleRemoveRecent}
+          fsApiSupported={fsApiSupported}
+          recentDirectories={recentDirectories}
+          reconnectTargetId={reconnectTargetId}
+          loading={loading || bootstrapping}
           progress={progress}
         />
       </div>
     );
   }
 
+  const activeRecent = recentDirectories.find((entry) => entry.id === activeRecentId) || null;
+
   return (
     <div className="flex h-screen flex-col">
-      {/* Header */}
       <header className="flex items-center justify-between border-b border-border px-4 py-2 glass">
         <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
           <span className="inline-block h-2 w-2 rounded-full bg-accent" />
           OpenRad
         </Link>
         <span className="text-xs text-muted truncate max-w-xs">
+          {activeRecent ? `${activeRecent.name} · ` : ""}
           {activeSeries?.seriesDescription}
         </span>
         <div className="flex items-center gap-2">
@@ -258,16 +513,13 @@ export default function ViewerApp() {
         </div>
       </header>
 
-      {/* Main content */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar */}
         <StudyBrowser
           studyTree={studyTree}
           activeSeries={activeSeries}
           onSelectSeries={setActiveSeries}
         />
 
-        {/* Viewport area */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {activeSeries ? (
             <>

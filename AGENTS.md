@@ -24,6 +24,7 @@ OpenRad is a Next.js 16 + TypeScript app. Main code lives in `src/`.
 - Utility modules: kebab-case file names (for example, `parse-files.ts`).
 - Imports: prefer `@/*` alias for `src/*` paths.
 - Linting: ESLint via `eslint.config.mjs` (`eslint-config-next` core-web-vitals + TypeScript rules).
+- Type safety policy: do not use TypeScript type assertions/casts (`as`, non-null assertions, double assertions). If a cast is truly unavoidable, stop and get explicit approval in the PR/issue before introducing it, and document why the cast is safe.
 
 ## Testing Guidelines
 There is no dedicated automated test framework configured yet. For every change:

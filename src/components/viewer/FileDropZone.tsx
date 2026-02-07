@@ -19,6 +19,14 @@ interface FileDropZoneProps {
   progress?: { done: number; total: number } | null;
 }
 
+function isFileSystemFileEntry(entry: FileSystemEntry): entry is FileSystemFileEntry {
+  return entry.isFile && "file" in entry;
+}
+
+function isFileSystemDirectoryEntry(entry: FileSystemEntry): entry is FileSystemDirectoryEntry {
+  return entry.isDirectory && "createReader" in entry;
+}
+
 export default function FileDropZone({
   onFilesSelected,
   onPickDirectory,
@@ -54,9 +62,9 @@ export default function FileDropZone({
         let pending = 0;
 
         function readEntry(entry: FileSystemEntry) {
-          if (entry.isFile) {
+          if (isFileSystemFileEntry(entry)) {
             pending++;
-            (entry as FileSystemFileEntry).file((f) => {
+            entry.file((f) => {
               Object.defineProperty(f, "webkitRelativePath", {
                 value: entry.fullPath.slice(1),
                 writable: false,
@@ -65,9 +73,9 @@ export default function FileDropZone({
               pending--;
               if (pending === 0) onFilesSelected(allFiles);
             });
-          } else if (entry.isDirectory) {
+          } else if (isFileSystemDirectoryEntry(entry)) {
             pending++;
-            const reader = (entry as FileSystemDirectoryEntry).createReader();
+            const reader = entry.createReader();
             reader.readEntries((entries) => {
               for (const child of entries) readEntry(child);
               pending--;

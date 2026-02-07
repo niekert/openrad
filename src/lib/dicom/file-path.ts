@@ -1,11 +1,8 @@
-export interface OpenRadFile extends File {
-  __openradRelativePath?: string;
-}
+const fileRelativePathMap = new WeakMap<File, string>();
 
 export function setFileRelativePath(file: File, relativePath: string): void {
   const normalized = relativePath.replace(/\\/g, "/");
-  const openRadFile = file as OpenRadFile;
-  openRadFile.__openradRelativePath = normalized;
+  fileRelativePathMap.set(file, normalized);
 
   // Keep webkitRelativePath in sync when browser allows redefining it.
   try {
@@ -20,6 +17,5 @@ export function setFileRelativePath(file: File, relativePath: string): void {
 }
 
 export function getFileRelativePath(file: File): string {
-  const openRadFile = file as OpenRadFile;
-  return openRadFile.__openradRelativePath || file.webkitRelativePath || file.name;
+  return fileRelativePathMap.get(file) || file.webkitRelativePath || file.name;
 }

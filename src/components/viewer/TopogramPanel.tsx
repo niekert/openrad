@@ -1,221 +1,205 @@
 "use client";
 
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useId } from "react";
+import { Enums, RenderingEngine, imageLoader, type StackViewport } from "@cornerstonejs/core";
 import type { Series } from "@/lib/dicom/types";
+import { getImageId } from "@/lib/cornerstone/custom-image-loader";
+import { logger } from "@/lib/debug";
+
+const log = logger("topogram");
+import { initCornerstone } from "@/lib/cornerstone/init";
 
 interface TopogramPanelProps {
+  sessionId: string;
   series: Series;
-  currentSlicePosition: number[] | null;
-  axialSlicePositions: (number[] | null)[] | null;
+  currentSlicePosition: [number, number, number] | null;
+  axialSlicePositions: ([number, number, number] | null)[] | null;
   onJumpToSlice: (index: number) => void;
 }
 
 export default function TopogramPanel({
+  sessionId,
   series,
   currentSlicePosition,
   axialSlicePositions,
   onJumpToSlice,
 }: TopogramPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const renderingEngineRef = useRef<unknown>(null);
-  const viewportRef = useRef<unknown>(null);
+  const renderingEngineRef = useRef<RenderingEngine | null>(null);
+  const viewportRef = useRef<StackViewport | null>(null);
   const lineRef = useRef<HTMLDivElement>(null);
-  const viewportId = "topogram-viewport";
+  const stableId = useId().replace(/:/g, "");
 
-  // Set up the topogram viewport
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
 
     let destroyed = false;
 
     const setup = async () => {
-      // Cornerstone's VTK pipeline requires WebGL2.
+      log.debug("setup start", { seriesUID: series.seriesInstanceUID, instances: series.instances.length });
+
       const probeCanvas = document.createElement("canvas");
       const webgl2 = probeCanvas.getContext("webgl2");
       if (!webgl2) {
+        log.warn("no webgl2 support");
         return;
       }
 
-      const cs = await import("@cornerstonejs/core");
-      const { initCornerstone } = await import("@/lib/cornerstone/init");
-      const { getImageId } = await import("@/lib/cornerstone/custom-image-loader");
-
       await initCornerstone();
 
-      if (destroyed || !containerRef.current) return;
-
-      const imageIds = series.instances.map((inst) => getImageId(inst.fileKey));
-      if (imageIds.length === 0) return;
-
-      // Clean up previous
-      if (renderingEngineRef.current) {
-        try {
-          (renderingEngineRef.current as { destroy: () => void }).destroy();
-        } catch { /* ignore */ }
+      if (destroyed) {
+        log.debug("setup aborted — destroyed during init");
+        return;
       }
 
-      const engineId = "topogramEngine";
-      const renderingEngine = new cs.RenderingEngine(engineId);
+      log.debug("resolved session", { sessionId });
+      const imageIds = series.instances.map((inst) => getImageId(inst.fileKey, sessionId));
+      if (imageIds.length === 0) {
+        log.warn("no image ids");
+        return;
+      }
+
+      if (renderingEngineRef.current) {
+        renderingEngineRef.current.destroy();
+      }
+
+      const engineId = `${stableId}-engine`;
+      const viewportId = `${stableId}-viewport`;
+      const renderingEngine = new RenderingEngine(engineId);
       renderingEngineRef.current = renderingEngine;
 
       renderingEngine.enableElement({
         viewportId,
-        type: cs.Enums.ViewportType.STACK,
-        element: containerRef.current,
+        type: Enums.ViewportType.STACK,
+        element: container,
       });
 
-      const viewport = renderingEngine.getViewport(viewportId) as InstanceType<typeof cs.StackViewport>;
+      const viewport = renderingEngine.getStackViewport(viewportId);
       viewportRef.current = viewport;
 
-      // NOT added to any tool group — no W/L, Pan, Zoom interaction
-
       await viewport.setStack(imageIds, 0);
+      await imageLoader.loadAndCacheImage(imageIds[0]);
 
-      // Preload the single image
-      await (cs.imageLoader as unknown as { loadAndCacheImage: (id: string) => Promise<unknown> })
-        .loadAndCacheImage(imageIds[0]);
+      if (destroyed) {
+        return;
+      }
 
-      if (destroyed) return;
-
-      // Fit image to panel width
       viewport.resetCamera();
       viewport.render();
     };
 
-    void setup().catch((error) => {
-      // Keep this concise; VTK may dump full shader source on failures.
-      console.warn("Topogram initialization failed.", error);
+    void setup().catch((error: unknown) => {
+      log.error("setup failed", error);
     });
 
     return () => {
+      log.debug("cleanup");
       destroyed = true;
+      viewportRef.current = null;
       if (renderingEngineRef.current) {
-        try {
-          (renderingEngineRef.current as { destroy: () => void }).destroy();
-        } catch { /* ignore */ }
+        renderingEngineRef.current.destroy();
         renderingEngineRef.current = null;
-        viewportRef.current = null;
       }
     };
-  }, [series]);
+  }, [series, sessionId, stableId]);
 
-  // Update line position when slice position changes
   useEffect(() => {
-    if (!currentSlicePosition || !viewportRef.current || !lineRef.current || !containerRef.current) {
-      if (lineRef.current) lineRef.current.style.display = "none";
+    const line = lineRef.current;
+    const container = containerRef.current;
+    const viewport = viewportRef.current;
+
+    if (!currentSlicePosition || !line || !container || !viewport) {
+      if (lineRef.current) {
+        lineRef.current.style.display = "none";
+      }
       return;
     }
 
-    const updateLine = () => {
-      const viewport = viewportRef.current as {
-        worldToCanvas: (point: [number, number, number]) => [number, number];
-      };
-      if (!viewport) return;
+    try {
+      const canvasPoint = viewport.worldToCanvas(currentSlicePosition);
+      const y = canvasPoint[1];
+      const containerHeight = container.clientHeight;
 
-      try {
-        // worldToCanvas expects a Point3 [x, y, z]
-        const worldPoint: [number, number, number] = [
-          currentSlicePosition[0],
-          currentSlicePosition[1],
-          currentSlicePosition[2],
-        ];
-        const canvasPoint = viewport.worldToCanvas(worldPoint);
-
-        if (lineRef.current && containerRef.current) {
-          const containerHeight = containerRef.current.clientHeight;
-          const y = canvasPoint[1];
-
-          if (y >= 0 && y <= containerHeight) {
-            lineRef.current.style.display = "block";
-            lineRef.current.style.top = `${y}px`;
-          } else {
-            lineRef.current.style.display = "none";
-          }
-        }
-      } catch {
-        if (lineRef.current) lineRef.current.style.display = "none";
+      if (y >= 0 && y <= containerHeight) {
+        line.style.display = "block";
+        line.style.top = `${y}px`;
+      } else {
+        line.style.display = "none";
       }
-    };
-
-    updateLine();
+    } catch {
+      line.style.display = "none";
+    }
   }, [currentSlicePosition]);
 
-  // ResizeObserver to re-fit image and recalculate line on container resize
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
 
     const observer = new ResizeObserver(() => {
-      if (!viewportRef.current || !containerRef.current) return;
+      const viewport = viewportRef.current;
+      const renderingEngine = renderingEngineRef.current;
+      if (!viewport || !renderingEngine) {
+        return;
+      }
 
-      const onResize = () => {
-        const viewport = viewportRef.current as {
-          resetCamera: () => void;
-          render: () => void;
-          worldToCanvas: (point: [number, number, number]) => [number, number];
-        };
-        if (!viewport) return;
+      renderingEngine.resize();
+      viewport.resetCamera();
+      viewport.render();
 
-        // Resize canvas and re-fit image
-        if (renderingEngineRef.current) {
-          (renderingEngineRef.current as { resize: () => void }).resize();
+      if (!currentSlicePosition || !lineRef.current) {
+        return;
+      }
+
+      try {
+        const canvasPoint = viewport.worldToCanvas(currentSlicePosition);
+        const y = canvasPoint[1];
+        if (y >= 0 && y <= container.clientHeight) {
+          lineRef.current.style.display = "block";
+          lineRef.current.style.top = `${y}px`;
+        } else {
+          lineRef.current.style.display = "none";
         }
-        viewport.resetCamera();
-        viewport.render();
-
-        // Update line position if we have one
-        if (currentSlicePosition && lineRef.current && containerRef.current) {
-          try {
-            const worldPoint: [number, number, number] = [
-              currentSlicePosition[0],
-              currentSlicePosition[1],
-              currentSlicePosition[2],
-            ];
-            const canvasPoint = viewport.worldToCanvas(worldPoint);
-            const containerHeight = containerRef.current.clientHeight;
-            const y = canvasPoint[1];
-            if (y >= 0 && y <= containerHeight) {
-              lineRef.current.style.display = "block";
-              lineRef.current.style.top = `${y}px`;
-            } else {
-              lineRef.current.style.display = "none";
-            }
-          } catch { /* ignore */ }
-        }
-      };
-
-      onResize();
+      } catch {
+        lineRef.current.style.display = "none";
+      }
     });
 
-    observer.observe(containerRef.current);
+    observer.observe(container);
     return () => observer.disconnect();
   }, [currentSlicePosition]);
 
-  // Click handler: click on topogram to jump to slice
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!viewportRef.current || !axialSlicePositions || !containerRef.current) return;
+      const viewport = viewportRef.current;
+      const container = containerRef.current;
+      if (!viewport || !container || !axialSlicePositions) {
+        return;
+      }
 
-      const viewport = viewportRef.current as {
-        canvasToWorld: (point: [number, number]) => [number, number, number];
-      };
-
-      const rect = containerRef.current.getBoundingClientRect();
-      const canvasX = rect.width / 2;
-      const canvasY = e.clientY - rect.top;
+      const rect = container.getBoundingClientRect();
+      const canvasPoint: [number, number] = [rect.width / 2, e.clientY - rect.top];
 
       try {
-        const worldPoint = viewport.canvasToWorld([canvasX, canvasY]);
+        const worldPoint = viewport.canvasToWorld(canvasPoint);
         const clickZ = worldPoint[2];
 
-        // Find nearest axial slice by Z distance
         let bestIndex = -1;
-        let bestDist = Infinity;
+        let bestDistance = Infinity;
+
         for (let i = 0; i < axialSlicePositions.length; i++) {
-          const pos = axialSlicePositions[i];
-          if (!pos) continue;
-          const dist = Math.abs(pos[2] - clickZ);
-          if (dist < bestDist) {
-            bestDist = dist;
+          const position = axialSlicePositions[i];
+          if (!position) {
+            continue;
+          }
+
+          const distance = Math.abs(position[2] - clickZ);
+          if (distance < bestDistance) {
+            bestDistance = distance;
             bestIndex = i;
           }
         }
@@ -224,23 +208,15 @@ export default function TopogramPanel({
           onJumpToSlice(bestIndex);
         }
       } catch {
-        // ignore conversion errors
+        // Ignore conversion errors.
       }
     },
     [axialSlicePositions, onJumpToSlice]
   );
 
   return (
-    <div
-      className="relative h-full w-full bg-black cursor-pointer"
-      onClick={handleClick}
-    >
-      <div
-        ref={containerRef}
-        className="h-full w-full"
-        onContextMenu={(e) => e.preventDefault()}
-      />
-      {/* Position line overlay */}
+    <div className="relative h-full w-full bg-black cursor-pointer" onClick={handleClick}>
+      <div ref={containerRef} className="h-full w-full" onContextMenu={(e) => e.preventDefault()} />
       <div
         ref={lineRef}
         className="pointer-events-none absolute left-0 right-0"

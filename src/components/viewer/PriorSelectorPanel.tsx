@@ -44,11 +44,11 @@ export default function PriorSelectorPanel({
     .sort((a, b) => sortStudies(a, b, activeStudy));
 
   const defaultSeriesByStudy = useMemo(() => {
-    const entries = candidates.map((study) => [
+    const entries: Array<[string, Series | null]> = candidates.map((study) => [
       study.studyInstanceUID,
       pickBestSeriesForStudy(study.series, activeSeries),
     ]);
-    return new Map(entries);
+    return new Map<string, Series | null>(entries);
   }, [activeSeries, candidates]);
 
   const handleSelectStudy = (study: CandidateStudy) => {

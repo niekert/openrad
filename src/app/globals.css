@@ -13,8 +13,8 @@
   --color-accent-dim: rgba(0, 255, 65, 0.10);
   --color-accent-muted: #22c55e;
   --color-emerald: #10b981;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
 }
 
 body {

@@ -18,8 +18,8 @@ export default function PanelContainer({
   return (
     <div className="flex h-full flex-shrink-0" style={{ width }}>
       <div className="flex flex-1 flex-col overflow-hidden">
-        <div className="flex h-10 items-center border-b border-border px-3">
-          <span className="text-xs font-medium text-muted">{title}</span>
+        <div className="flex h-8 items-center border-b border-border px-3 text-[11px] text-muted">
+          <span className="uppercase tracking-widest">{title}</span>
         </div>
         <div className="flex-1 overflow-hidden">{children}</div>
       </div>

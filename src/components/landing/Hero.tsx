@@ -19,7 +19,7 @@ export default function Hero() {
         Medical imaging
         <br />
         <span className="text-accent glow-green-text">
-          in your browser.
+          in your browser
         </span>
       </h1>
 

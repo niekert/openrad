@@ -96,7 +96,7 @@ export default function XRayPage() {
               href="/viewer"
               className="inline-flex items-center gap-2 rounded-full bg-accent px-7 py-3 text-sm font-semibold text-background transition-all hover:glow-green hover:scale-[1.02] active:scale-[0.98]"
             >
-              Open X-ray Viewer
+              Launch X-ray Viewer
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                 <path
                   d="M6 3l5 5-5 5"

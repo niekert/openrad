@@ -4,7 +4,7 @@ import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 
 export const metadata: Metadata = {
-  title: "View X-rays in Your Browser — OpenRad",
+  title: "View X-rays in Your Browser — openrad",
   description:
     "Open and view X-ray DICOM files directly in your browser. Supports CR and DR modalities. No uploads, no installs, 100% private.",
   keywords: [
@@ -13,12 +13,12 @@ export const metadata: Metadata = {
     "radiography viewer",
     "browser X-ray",
     "CR DR viewer",
-    "OpenRad X-ray",
+    "openrad X-ray",
     "view X-ray free",
     "digital radiography viewer",
   ],
   openGraph: {
-    title: "View X-rays in Your Browser — OpenRad",
+    title: "View X-rays in Your Browser — openrad",
     description:
       "Open and view X-ray DICOM files directly in your browser. No uploads, no installs, 100% private.",
   },
@@ -65,7 +65,7 @@ export default function XRayPage() {
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold font-mono">OpenRad X-ray features</h2>
+              <h2 className="text-xl font-semibold font-mono">openrad X-ray features</h2>
               <ul className="mt-3 space-y-2 text-sm text-muted">
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OpenRad — View Medical Images in Your Browser",
+  title: "openrad — View Medical Images in Your Browser",
   description:
     "View CT scans, MRI, and X-rays instantly in the browser. No uploads, no installs, 100% private. Open source DICOM viewer for any medical imaging modality.",
   keywords: [
@@ -14,12 +14,12 @@ export const metadata: Metadata = {
     "browser DICOM",
     "open source DICOM",
     "medical image viewer",
-    "OpenRad",
+    "openrad",
     "DICOM CD viewer",
     "radiology viewer",
   ],
   openGraph: {
-    title: "OpenRad — View Medical Images in Your Browser",
+    title: "openrad — View Medical Images in Your Browser",
     description:
       "View CT scans, MRI, and X-rays instantly in the browser. No uploads, no installs, 100% private.",
     type: "website",

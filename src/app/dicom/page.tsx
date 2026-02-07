@@ -4,7 +4,7 @@ import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 
 export const metadata: Metadata = {
-  title: "What is DICOM? How to Get Your Medical Images — OpenRad",
+  title: "What is DICOM? How to Get Your Medical Images — openrad",
   description:
     "Learn what DICOM files are, how medical images are stored, and how to request and access your CT, MRI, and X-ray files from hospitals and imaging centers.",
   keywords: [
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     "download medical images",
   ],
   openGraph: {
-    title: "What is DICOM? How to Get Your Medical Images — OpenRad",
+    title: "What is DICOM? How to Get Your Medical Images — openrad",
     description:
       "Learn what DICOM files are and how to request your CT, MRI, and X-ray images from hospitals and imaging centers.",
   },
@@ -112,7 +112,7 @@ export default function DicomPage() {
               <p className="mt-4 text-sm text-muted leading-relaxed">
                 Most hospital CDs also include a special file called DICOMDIR.
                 This is an index file that lists all the images and how they are
-                organized. OpenRad reads this file automatically so you can
+                organized. openrad reads this file automatically so you can
                 browse your studies and series without waiting for every file to
                 be parsed.
               </p>
@@ -174,9 +174,9 @@ export default function DicomPage() {
               </div>
             </div>
 
-            {/* Using with OpenRad */}
+            {/* Using with openrad */}
             <div>
-              <h2 className="text-2xl font-semibold">Viewing your files with OpenRad</h2>
+              <h2 className="text-2xl font-semibold">Viewing your files with openrad</h2>
               <p className="mt-3 text-sm text-muted leading-relaxed">
                 Once you have your DICOM files on a CD, DVD, USB drive, or
                 downloaded to your computer:
@@ -187,7 +187,7 @@ export default function DicomPage() {
                     1
                   </span>
                   <span>
-                    Open <Link href="/viewer" className="text-accent hover:underline">OpenRad Viewer</Link> in
+                    Open <Link href="/viewer" className="text-accent hover:underline">openrad Viewer</Link> in
                     your browser
                   </span>
                 </li>
@@ -226,7 +226,7 @@ export default function DicomPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>
-                  If your CD includes a viewer application, you can ignore it and use OpenRad instead
+                  If your CD includes a viewer application, you can ignore it and use openrad instead
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>
@@ -234,7 +234,7 @@ export default function DicomPage() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>
-                  Select the top-level folder, not individual files. OpenRad will find all images automatically
+                  Select the top-level folder, not individual files. openrad will find all images automatically
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>

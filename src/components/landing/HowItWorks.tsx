@@ -7,7 +7,7 @@ const steps = [
   {
     number: "2",
     title: "Browse your studies and series",
-    description: "OpenRad reads the DICOMDIR index to show all your studies, series, and slices.",
+    description: "openrad reads the DICOMDIR index to show all your studies, series, and slices.",
   },
   {
     number: "3",

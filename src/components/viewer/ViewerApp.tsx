@@ -238,7 +238,7 @@ export default function ViewerApp() {
         <header className="flex items-center justify-between border-b border-border px-4 py-2 glass">
           <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
             <span className="inline-block h-2 w-2 rounded-full bg-accent" />
-            OpenRad
+            openrad
           </Link>
         </header>
         <FileDropZone
@@ -266,7 +266,7 @@ export default function ViewerApp() {
       <header className="flex items-center justify-between border-b border-border px-4 py-2 glass">
         <Link href="/" className="flex items-center gap-2 text-sm font-semibold">
           <span className="inline-block h-2 w-2 rounded-full bg-accent" />
-          OpenRad
+          openrad
         </Link>
         <span className="text-xs text-muted truncate max-w-xs">
           {activeRecent ? `${activeRecent.name} · ` : ""}

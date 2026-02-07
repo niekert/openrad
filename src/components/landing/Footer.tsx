@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-4 sm:flex-row sm:justify-between">
         <div className="flex items-center gap-2 font-mono text-sm text-muted">
           <span className="inline-block h-2 w-2 rounded-full bg-accent" />
-          OpenRad
+          openrad
         </div>
         <p className="text-xs text-muted">
           Open source. Your files never leave your device.

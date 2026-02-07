@@ -83,7 +83,7 @@ export default function Hero() {
           </div>
           <Image
             src="/screenshot.jpg"
-            alt="OpenRad viewer showing a CT scan"
+            alt="openrad viewer showing a CT scan"
             width={2560}
             height={1600}
             className="w-full h-auto"

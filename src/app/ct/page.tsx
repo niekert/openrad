@@ -4,7 +4,7 @@ import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 
 export const metadata: Metadata = {
-  title: "View CT Scans in Your Browser — OpenRad",
+  title: "View CT Scans in Your Browser — openrad",
   description:
     "Open and view CT scan DICOM files directly in your browser. No uploads, no installs. Supports DICOMDIR, window/level presets, measurements, and smooth slice scrolling.",
   keywords: [
@@ -13,11 +13,11 @@ export const metadata: Metadata = {
     "computed tomography viewer",
     "browser CT scan",
     "CT DICOM online",
-    "OpenRad CT",
+    "openrad CT",
     "view CT scan free",
   ],
   openGraph: {
-    title: "View CT Scans in Your Browser — OpenRad",
+    title: "View CT Scans in Your Browser — openrad",
     description:
       "Open and view CT scan DICOM files directly in your browser. No uploads, no installs, 100% private.",
   },
@@ -56,7 +56,7 @@ export default function CTPage() {
               <h2 className="text-xl font-semibold font-mono">DICOM structure</h2>
               <p className="mt-3 text-sm text-muted leading-relaxed">
                 Hospital CT discs typically contain a DICOMDIR index file that organizes
-                your images into a hierarchy: Patient → Study → Series → Image. OpenRad
+                your images into a hierarchy: Patient → Study → Series → Image. openrad
                 reads this index automatically, or falls back to scanning all files in the
                 folder. Each DICOM file contains both the image pixel data and metadata like
                 slice position, spacing, and Hounsfield unit calibration.
@@ -64,7 +64,7 @@ export default function CTPage() {
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold font-mono">OpenRad CT features</h2>
+              <h2 className="text-xl font-semibold font-mono">openrad CT features</h2>
               <ul className="mt-3 space-y-2 text-sm text-muted">
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>

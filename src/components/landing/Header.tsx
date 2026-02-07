@@ -10,7 +10,7 @@ export default function Header() {
             className="flex items-center gap-2 font-mono font-semibold text-foreground-bright"
           >
             <span className="inline-block h-2.5 w-2.5 rounded-full bg-accent" />
-            OpenRad
+            openrad
           </Link>
           <nav className="hidden sm:flex items-center gap-4 text-sm text-muted">
             <Link href="/ct" className="hover:text-accent transition-colors">

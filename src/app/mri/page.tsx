@@ -4,7 +4,7 @@ import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 
 export const metadata: Metadata = {
-  title: "View MRI Scans in Your Browser — OpenRad",
+  title: "View MRI Scans in Your Browser — openrad",
   description:
     "Open and view MRI DICOM files directly in your browser. Supports T1, T2, FLAIR sequences. No uploads, no installs, 100% private.",
   keywords: [
@@ -13,12 +13,12 @@ export const metadata: Metadata = {
     "magnetic resonance imaging viewer",
     "browser MRI scan",
     "MRI DICOM online",
-    "OpenRad MRI",
+    "openrad MRI",
     "view MRI free",
     "T1 T2 FLAIR viewer",
   ],
   openGraph: {
-    title: "View MRI Scans in Your Browser — OpenRad",
+    title: "View MRI Scans in Your Browser — openrad",
     description:
       "Open and view MRI DICOM files directly in your browser. No uploads, no installs, 100% private.",
   },
@@ -65,7 +65,7 @@ export default function MRIPage() {
             </div>
 
             <div>
-              <h2 className="text-xl font-semibold font-mono">OpenRad MRI features</h2>
+              <h2 className="text-xl font-semibold font-mono">openrad MRI features</h2>
               <ul className="mt-3 space-y-2 text-sm text-muted">
                 <li className="flex items-start gap-2">
                   <span className="text-accent mt-0.5">&#x2713;</span>

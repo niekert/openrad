@@ -515,7 +515,7 @@ export class ViewerSessionController {
 
 export function formatViewerLoadError(error: unknown): string {
   if (isPermissionDeniedError(error)) {
-    return "OpenRad needs read access to that folder. Click Reconnect to grant access.";
+    return "openrad needs read access to that folder. Click Reconnect to grant access.";
   }
   if (error instanceof Error && error.message === "scan-timeout") {
     return "File scan timed out. Please select a smaller folder or reconnect again.";

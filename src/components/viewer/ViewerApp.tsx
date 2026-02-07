@@ -42,6 +42,24 @@ function isPermissionDeniedError(error: unknown): boolean {
   return error instanceof Error && error.message === "permission-denied";
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(errorMessage));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 export default function ViewerApp() {
   const [studyTree, setStudyTree] = useState<StudyTree | null>(null);
   const [activeSeries, setActiveSeries] = useState<Series | null>(null);
@@ -53,6 +71,7 @@ export default function ViewerApp() {
     done: number;
     total: number;
   } | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState<string | null>(null);
   const [bootstrapping, setBootstrapping] = useState(true);
   const [fsApiSupported, setFsApiSupported] = useState(false);
   const [recentDirectories, setRecentDirectories] = useState<RecentDirectoryEntry[]>([]);
@@ -92,21 +111,38 @@ export default function ViewerApp() {
     clearFiles();
     registerFiles(files);
 
-    let tree = await parseDicomdirFromFiles(files);
+    setLoadingMessage("Reading DICOMDIR...");
+    let tree: StudyTree | null = null;
+    try {
+      tree = await withTimeout(
+        parseDicomdirFromFiles(files),
+        7000,
+        "dicomdir-timeout"
+      );
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "dicomdir-timeout") {
+        throw error;
+      }
+    }
 
     if (!tree || tree.studies.length === 0) {
-      tree = await parseFilesWithoutDicomdir(files, (done, total) => {
-        setProgress({ done, total });
-      });
+      setLoadingMessage("Scanning files...");
+      tree = await withTimeout(
+        parseFilesWithoutDicomdir(files, (done, total) => {
+          setProgress({ done, total });
+          setLoadingMessage(
+            `Scanning files... ${done.toLocaleString()} / ${total.toLocaleString()}`
+          );
+        }),
+        120000,
+        "scan-timeout"
+      );
     }
 
     setStudyTree(tree);
 
-    if (tree.studies.length > 0 && tree.studies[0].series.length > 0) {
-      setActiveSeries(tree.studies[0].series[0]);
-    } else {
-      setActiveSeries(null);
-    }
+    const firstSeries = tree.studies[0]?.series[0] || null;
+    setActiveSeries(firstSeries);
   }, []);
 
   const openDirectoryHandle = useCallback(
@@ -120,6 +156,7 @@ export default function ViewerApp() {
     ) => {
       setLoading(true);
       setProgress(null);
+      setLoadingMessage("Requesting folder access...");
 
       try {
         const permission = options.requestPermission
@@ -130,7 +167,10 @@ export default function ViewerApp() {
           throw new Error("permission-denied");
         }
 
-        const files = await readAllFilesFromDirectory(handle);
+        setLoadingMessage("Reading files from folder...");
+        const files = await readAllFilesFromDirectory(handle, (readCount) => {
+          setLoadingMessage(`Reading files from folder... ${readCount.toLocaleString()}`);
+        });
         if (files.length === 0) {
           throw new Error("empty-directory");
         }
@@ -172,6 +212,8 @@ export default function ViewerApp() {
         if (options.showErrorAlert !== false) {
           if (isPermissionDeniedError(error)) {
             alert("OpenRad needs read access to that folder. Click Reconnect to grant access.");
+          } else if (error instanceof Error && error.message === "scan-timeout") {
+            alert("File scan timed out. Please select a smaller folder or reconnect again.");
           } else if (error instanceof Error && error.message === "empty-directory") {
             alert("The selected folder does not contain readable files.");
           } else {
@@ -181,6 +223,7 @@ export default function ViewerApp() {
       } finally {
         setLoading(false);
         setProgress(null);
+        setLoadingMessage(null);
       }
     },
     [parseAndLoadFiles, refreshRecentDirectories]
@@ -190,6 +233,7 @@ export default function ViewerApp() {
     async (files: File[]) => {
       setLoading(true);
       setProgress(null);
+      setLoadingMessage("Preparing files...");
 
       try {
         await parseAndLoadFiles(files);
@@ -199,6 +243,7 @@ export default function ViewerApp() {
       } finally {
         setLoading(false);
         setProgress(null);
+        setLoadingMessage(null);
       }
     },
     [parseAndLoadFiles]
@@ -500,6 +545,7 @@ export default function ViewerApp() {
           recentDirectories={recentDirectories}
           reconnectTargetId={reconnectTargetId}
           loading={loading || bootstrapping}
+          loadingMessage={loadingMessage}
           progress={progress}
         />
       </div>

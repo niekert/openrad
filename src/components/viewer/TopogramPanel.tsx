@@ -29,6 +29,13 @@ export default function TopogramPanel({
     let destroyed = false;
 
     const setup = async () => {
+      // Cornerstone's VTK pipeline requires WebGL2.
+      const probeCanvas = document.createElement("canvas");
+      const webgl2 = probeCanvas.getContext("webgl2");
+      if (!webgl2) {
+        return;
+      }
+
       const cs = await import("@cornerstonejs/core");
       const { initCornerstone } = await import("@/lib/cornerstone/init");
       const { getImageId } = await import("@/lib/cornerstone/custom-image-loader");
@@ -75,7 +82,10 @@ export default function TopogramPanel({
       viewport.render();
     };
 
-    setup();
+    void setup().catch((error) => {
+      // Keep this concise; VTK may dump full shader source on failures.
+      console.warn("Topogram initialization failed.", error);
+    });
 
     return () => {
       destroyed = true;

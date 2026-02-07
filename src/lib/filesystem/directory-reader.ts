@@ -21,9 +21,11 @@ export async function requestReadPermission(
 }
 
 export async function readAllFilesFromDirectory(
-  handle: FileSystemDirectoryHandle
+  handle: FileSystemDirectoryHandle,
+  onProgress?: (readCount: number) => void
 ): Promise<File[]> {
   const files: File[] = [];
+  let readCount = 0;
 
   const walk = async (dir: FileSystemDirectoryHandle, pathSegments: string[]): Promise<void> => {
     for await (const entry of dir.values()) {
@@ -32,6 +34,10 @@ export async function readAllFilesFromDirectory(
         const relativePath = [handle.name, ...pathSegments, entry.name].join("/");
         setFileRelativePath(file, relativePath);
         files.push(file);
+        readCount += 1;
+        if (onProgress && (readCount <= 25 || readCount % 100 === 0)) {
+          onProgress(readCount);
+        }
         continue;
       }
 
@@ -42,5 +48,6 @@ export async function readAllFilesFromDirectory(
   };
 
   await walk(handle, []);
+  onProgress?.(readCount);
   return files;
 }

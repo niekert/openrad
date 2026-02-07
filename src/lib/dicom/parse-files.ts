@@ -3,6 +3,24 @@ import type { StudyTree, Study, Series, Instance } from "./types";
 import { generateFileKey } from "./file-manager";
 import { getFileRelativePath } from "./file-path";
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error("timeout"));
+    }, timeoutMs);
+
+    promise
+      .then((value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      })
+      .catch((error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      });
+  });
+}
+
 async function isDicomFile(file: File): Promise<boolean> {
   if (file.size < 132) return false;
   const header = await file.slice(128, 132).arrayBuffer();
@@ -79,10 +97,20 @@ export async function parseFilesWithoutDicomdir(
           onProgress(processed, total);
         }
 
-        const isDcm = await isDicomFile(file);
+        let isDcm = false;
+        try {
+          isDcm = await withTimeout(isDicomFile(file), 3000);
+        } catch {
+          return;
+        }
         if (!isDcm) return;
 
-        const header = await parseHeader(file);
+        let header: ParsedHeader | null = null;
+        try {
+          header = await withTimeout(parseHeader(file), 5000);
+        } catch {
+          return;
+        }
         if (!header) return;
 
         const path = getFileRelativePath(file);

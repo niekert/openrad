@@ -15,6 +15,7 @@ interface FileDropZoneProps {
   recentDirectories: RecentDirectoryEntry[];
   reconnectTargetId: string | null;
   loading?: boolean;
+  loadingMessage?: string | null;
   progress?: { done: number; total: number } | null;
 }
 
@@ -29,6 +30,7 @@ export default function FileDropZone({
   recentDirectories,
   reconnectTargetId,
   loading,
+  loadingMessage,
   progress,
 }: FileDropZoneProps) {
   const [dragging, setDragging] = useState(false);
@@ -127,7 +129,9 @@ export default function FileDropZone({
             <div className="flex flex-col items-center gap-4">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent" />
               <p className="text-sm text-muted">
-                {progress
+                {loadingMessage
+                  ? loadingMessage
+                  : progress
                   ? `Scanning files... ${progress.done.toLocaleString()} / ${progress.total.toLocaleString()}`
                   : "Reading DICOMDIR..."}
               </p>

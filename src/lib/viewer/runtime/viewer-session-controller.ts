@@ -194,6 +194,11 @@ export class ViewerSessionController {
   }
 
   async setViewportSeries(viewportId: RuntimeViewportId, seriesUID: string | null): Promise<void> {
+    const current = this.store.getSnapshot().viewports[viewportId].seriesInstanceUID;
+    if (current === seriesUID && this.runtime.hasMountedViewport(viewportId)) {
+      return;
+    }
+
     this.store.dispatch({ type: "viewport/setSeries", viewportId, seriesUID });
     const series = this.findSeriesByUID(seriesUID);
     await this.runtime.setSeries(viewportId, series);

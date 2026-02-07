@@ -70,7 +70,7 @@ interface MountedViewport {
   cleanupListeners: () => void;
 }
 
-const PRELOAD_IMAGE_LIMIT = 120;
+const PRELOAD_CONCURRENCY = 10;
 
 let initialized = false;
 let initPromise: Promise<void> | null = null;
@@ -454,20 +454,42 @@ export class CornerstoneViewportRuntime {
     loadVersion: number,
     imageIds: string[],
   ): Promise<void> {
-    const limitedImageIds = imageIds.slice(0, PRELOAD_IMAGE_LIMIT);
-    for (const imageId of limitedImageIds) {
-      if (!this.isLatestLoad(viewportId, loadVersion)) {
-        return;
+    let nextIndex = 0;
+
+    const worker = async () => {
+      while (true) {
+        if (!this.isLatestLoad(viewportId, loadVersion)) {
+          return;
+        }
+
+        const index = nextIndex;
+        nextIndex += 1;
+        if (index >= imageIds.length) {
+          return;
+        }
+
+        const imageId = imageIds[index];
+        try {
+          await imageLoader.loadAndCacheImage(imageId);
+        } catch (error: unknown) {
+          log.warn("preload failed", {
+            viewportId,
+            imageId,
+            error: error instanceof Error ? error.message : "unknown",
+          });
+        }
       }
-      try {
-        await imageLoader.loadAndCacheImage(imageId);
-      } catch (error: unknown) {
-        log.warn("preload failed", {
-          viewportId,
-          imageId,
-          error: error instanceof Error ? error.message : "unknown",
-        });
-      }
+    };
+
+    const workerCount = Math.min(PRELOAD_CONCURRENCY, imageIds.length);
+    const workers = Array.from({ length: workerCount }, () => worker());
+    await Promise.all(workers);
+
+    if (!this.isLatestLoad(viewportId, loadVersion)) {
+      return;
     }
+
+    const positions = imageIds.map((imageId) => getPosition(imageId));
+    this.callbacks.onAxialPositionsReady(viewportId, positions);
   }
 }

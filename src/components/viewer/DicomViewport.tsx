@@ -1,18 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { Series } from "@/lib/dicom/types";
 import type { ViewerSessionController } from "@/lib/viewer/runtime/viewer-session-controller";
 import type { RuntimeViewportId } from "@/lib/cornerstone/runtime";
 
 interface DicomViewportProps {
   viewportId: RuntimeViewportId;
   session: ViewerSessionController;
+  series: Series;
   jumpToSliceIndex?: number | null;
 }
 
 export default function DicomViewport({
   viewportId,
   session,
+  series,
   jumpToSliceIndex,
 }: DicomViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -41,6 +44,10 @@ export default function DicomViewport({
       session.unregisterViewportMount(viewportId);
     };
   }, [session, viewportId]);
+
+  useEffect(() => {
+    void session.setViewportSeries(viewportId, series.seriesInstanceUID);
+  }, [session, viewportId, series.seriesInstanceUID]);
 
   useEffect(() => {
     if (jumpToSliceIndex == null) {

@@ -361,6 +361,7 @@ export default function ViewerApp() {
                         <DicomViewport
                           viewportId="compare"
                           session={session}
+                          series={compareSeries}
                           jumpToSliceIndex={state.viewports.compare.jumpToIndex}
                         />
                       )}
@@ -373,6 +374,7 @@ export default function ViewerApp() {
                       <DicomViewport
                         viewportId="primary"
                         session={session}
+                        series={activeSeries}
                         jumpToSliceIndex={state.viewports.primary.jumpToIndex}
                       />
                     </div>
@@ -381,6 +383,7 @@ export default function ViewerApp() {
                   <DicomViewport
                     viewportId="primary"
                     session={session}
+                    series={activeSeries}
                     jumpToSliceIndex={state.viewports.primary.jumpToIndex}
                   />
                 )}

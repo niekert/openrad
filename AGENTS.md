@@ -42,3 +42,8 @@ Follow the existing history style: short, imperative commit messages (for exampl
 
 ## Security & Data Handling
 This project is designed for local, in-browser DICOM viewing. Do not commit patient-identifiable data. Use only de-identified datasets in `dicom-examples/` and documentation.
+
+## Example Data Notes
+- `dicom-examples/` contains de-identified CT studies used for viewer development and manual QA.
+- Keep examples free of PII in directory names, screenshots, tests, and docs.
+- Compare-feature validation should cover at least the thorax/abdomen and hals/thorax/abdomen example sets, including topogram, soft kernel, and lung kernel series variants.

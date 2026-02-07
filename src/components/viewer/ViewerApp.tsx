@@ -9,7 +9,7 @@ import { createViewerStore } from "@/lib/viewer/state/store";
 import {
   selectActiveSeries,
   selectActiveStudy,
-  selectCompareEnabled,
+  selectComparePanelOpen,
   selectCompareSeries,
   selectCompareStudy,
   selectTopogramSeries,
@@ -26,7 +26,7 @@ import DicomViewport from "./DicomViewport";
 import TopogramPanel from "./TopogramPanel";
 import PanelActivityBar from "./PanelActivityBar";
 import PanelContainer from "./PanelContainer";
-import ComparePanel from "./ComparePanel";
+import PriorSelectorPanel from "./PriorSelectorPanel";
 
 export default function ViewerApp() {
   const [store] = useState(() => createViewerStore());
@@ -43,7 +43,9 @@ export default function ViewerApp() {
   const activeStudy = selectActiveStudy(state);
   const compareStudy = selectCompareStudy(state);
   const topogramSeries = selectTopogramSeries(state);
-  const compareEnabled = selectCompareEnabled(state);
+  const comparePanelOpen = selectComparePanelOpen(state);
+  const [priorSelectorRequested, setPriorSelectorRequested] = useState(false);
+  const priorSelectorOpen = comparePanelOpen && (priorSelectorRequested || !compareSeries);
 
   useEffect(() => {
     void session.start().catch((error: unknown) => {
@@ -170,7 +172,7 @@ export default function ViewerApp() {
       },
       {
         id: "compare",
-        title: "Compare",
+        title: "Prior",
         available: FEATURES.compareViewer && !!activeSeries,
         icon: (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -206,10 +208,13 @@ export default function ViewerApp() {
   const handlePanelToggle = useCallback(
     (id: string) => {
       if (id === "topogram" || id === "compare") {
+        if (id === "compare" && state.panels.open.has("compare")) {
+          setPriorSelectorRequested(false);
+        }
         session.togglePanel(id);
       }
     },
-    [session]
+    [session, state.panels.open]
   );
 
   const handleJumpToSlice = useCallback(
@@ -222,13 +227,10 @@ export default function ViewerApp() {
   const handleSelectCompareSeries = useCallback(
     (series: Series) => {
       session.selectCompareSeries(series.seriesInstanceUID);
+      setPriorSelectorRequested(false);
     },
     [session]
   );
-
-  const handleClearCompareSeries = useCallback(() => {
-    session.selectCompareSeries(null);
-  }, [session]);
 
   if (!state.studyTree) {
     return (
@@ -324,40 +326,45 @@ export default function ViewerApp() {
                   </PanelContainer>
                 )}
 
-                {FEATURES.compareViewer && state.panels.open.has("compare") && (
-                  <PanelContainer
-                    title="Compare"
-                    width={state.panels.widths.compare}
-                    onWidthChange={(width) => session.setPanelWidth("compare", width)}
-                  >
-                    <ComparePanel
-                      studyTree={state.studyTree}
-                      activeSeries={activeSeries}
-                      selectedCompareSeries={compareSeries}
-                      onSelectCompareSeries={handleSelectCompareSeries}
-                      onClearCompareSeries={handleClearCompareSeries}
-                    />
-                  </PanelContainer>
-                )}
-
-                {compareEnabled && compareSeries ? (
+                {comparePanelOpen ? (
                   <div className="grid flex-1 grid-cols-2 overflow-hidden">
                     <div className="flex min-w-0 flex-col border-r border-border">
                       <div className="flex h-8 items-center justify-between border-b border-border px-3 text-[11px] text-muted">
                         <span className="uppercase tracking-widest">Prior</span>
-                        <span>
-                          {compareStudy?.studyDate ? formatDate(compareStudy.studyDate) : ""}
-                          {state.viewports.compare.total > 0
-                            ? ` · ${state.viewports.compare.currentIndex + 1}/${state.viewports.compare.total}`
-                            : ""}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span>
+                            {compareSeries
+                              ? `${compareStudy?.studyDate ? formatDate(compareStudy.studyDate) : ""}${
+                                  state.viewports.compare.total > 0
+                                    ? ` · ${state.viewports.compare.currentIndex + 1}/${state.viewports.compare.total}`
+                                    : ""
+                                }`
+                              : "Select prior study"}
+                          </span>
+                          <button
+                            onClick={() => setPriorSelectorRequested(true)}
+                            className="rounded border border-border px-1.5 py-0.5 text-[10px] uppercase tracking-widest transition-colors hover:bg-surface hover:text-foreground"
+                          >
+                            Switch
+                          </button>
+                        </div>
                       </div>
-                      <DicomViewport
-                        viewportId="compare"
-                        session={session}
-                        series={compareSeries}
-                        jumpToSliceIndex={state.viewports.compare.jumpToIndex}
-                      />
+                      {priorSelectorOpen || !compareSeries ? (
+                        <PriorSelectorPanel
+                          studyTree={state.studyTree}
+                          activeSeries={activeSeries}
+                          selectedCompareSeries={compareSeries}
+                          onSelectCompareSeries={handleSelectCompareSeries}
+                          onCloseSelector={() => setPriorSelectorRequested(false)}
+                        />
+                      ) : (
+                        <DicomViewport
+                          viewportId="compare"
+                          session={session}
+                          series={compareSeries}
+                          jumpToSliceIndex={state.viewports.compare.jumpToIndex}
+                        />
+                      )}
                     </div>
                     <div className="flex min-w-0 flex-col">
                       <div className="flex h-8 items-center justify-between border-b border-border px-3 text-[11px] text-muted">

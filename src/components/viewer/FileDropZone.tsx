@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import Link from "next/link";
 import type { RecentDirectoryEntry } from "@/lib/filesystem/persistent-directories";
 
 interface FileDropZoneProps {
@@ -10,6 +11,7 @@ interface FileDropZoneProps {
   onReconnectRecent: (id: string) => void;
   onRemoveRecent: (id: string) => void;
   fsApiSupported: boolean;
+  pickerBusy: boolean;
   recentDirectories: RecentDirectoryEntry[];
   reconnectTargetId: string | null;
   loading?: boolean;
@@ -23,6 +25,7 @@ export default function FileDropZone({
   onReconnectRecent,
   onRemoveRecent,
   fsApiSupported,
+  pickerBusy,
   recentDirectories,
   reconnectTargetId,
   loading,
@@ -83,13 +86,14 @@ export default function FileDropZone({
   );
 
   const handleDropZoneClick = useCallback(() => {
+    if (loading || pickerBusy) return;
+
     if (fsApiSupported) {
-      onPickDirectory();
       return;
     }
 
     inputRef.current?.click();
-  }, [fsApiSupported, onPickDirectory]);
+  }, [fsApiSupported, loading, pickerBusy]);
 
   return (
     <div className="flex h-full w-full items-center justify-center p-8">
@@ -152,13 +156,14 @@ export default function FileDropZone({
               {fsApiSupported ? (
                 <button
                   type="button"
+                  disabled={pickerBusy || loading}
                   onClick={(e) => {
                     e.stopPropagation();
                     onPickDirectory();
                   }}
-                  className="mt-6 rounded-lg border border-border-bright px-4 py-2 text-sm transition-colors hover:bg-surface"
+                  className="mt-6 rounded-lg border border-border-bright px-4 py-2 text-sm transition-colors hover:bg-surface disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Open Folder
+                  {pickerBusy ? "Opening..." : "Open Folder"}
                 </button>
               ) : (
                 <p className="mt-4 text-xs text-muted text-center max-w-md">
@@ -234,6 +239,25 @@ export default function FileDropZone({
                   </div>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {!loading && (
+          <div className="rounded-2xl border border-border-bright bg-gradient-to-r from-surface to-background p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold">New to DICOM?</p>
+                <p className="mt-1 text-xs text-muted">
+                  Learn what studies, series, and DICOMDIR mean before opening your folder.
+                </p>
+              </div>
+              <Link
+                href="/dicom"
+                className="shrink-0 rounded-lg border border-border-bright px-3 py-1.5 text-xs font-medium transition-colors hover:bg-surface"
+              >
+                DICOM Guide
+              </Link>
             </div>
           </div>
         )}

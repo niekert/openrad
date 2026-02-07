@@ -58,6 +58,8 @@ export default function ViewerApp() {
   const [recentDirectories, setRecentDirectories] = useState<RecentDirectoryEntry[]>([]);
   const [activeRecentId, setActiveRecentId] = useState<string | null>(null);
   const [reconnectTargetId, setReconnectTargetId] = useState<string | null>(null);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const directoryPickerPromiseRef = useRef<Promise<void> | null>(null);
 
   // Slice/window state for status bar
   const [currentSlice, setCurrentSlice] = useState(0);
@@ -203,22 +205,41 @@ export default function ViewerApp() {
   );
 
   const handlePickDirectory = useCallback(async () => {
-    if (!fsApiSupported) return;
+    if (!fsApiSupported || loading || bootstrapping) return;
+    if (directoryPickerPromiseRef.current) return;
 
-    try {
-      const handle = await pickDirectory();
-      await openDirectoryHandle(handle, {
-        requestPermission: true,
-      });
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
+    const pickerTask = (async () => {
+      setPickerBusy(true);
+
+      try {
+        const handle = await pickDirectory();
+        await openDirectoryHandle(handle, {
+          requestPermission: true,
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        if (
+          error instanceof DOMException &&
+          error.name === "NotAllowedError" &&
+          error.message.includes("already active")
+        ) {
+          return;
+        }
+
+        console.error("Directory picker failed:", error);
+        alert("Failed to open directory picker.");
+      } finally {
+        setPickerBusy(false);
+        directoryPickerPromiseRef.current = null;
       }
+    })();
 
-      console.error("Directory picker failed:", error);
-      alert("Failed to open directory picker.");
-    }
-  }, [fsApiSupported, openDirectoryHandle]);
+    directoryPickerPromiseRef.current = pickerTask;
+    await pickerTask;
+  }, [bootstrapping, fsApiSupported, loading, openDirectoryHandle]);
 
   const handleOpenRecent = useCallback(
     async (id: string) => {
@@ -475,6 +496,7 @@ export default function ViewerApp() {
           onReconnectRecent={handleReconnectRecent}
           onRemoveRecent={handleRemoveRecent}
           fsApiSupported={fsApiSupported}
+          pickerBusy={pickerBusy}
           recentDirectories={recentDirectories}
           reconnectTargetId={reconnectTargetId}
           loading={loading || bootstrapping}

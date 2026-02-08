@@ -240,6 +240,14 @@ export class ViewerSessionController {
     this.runtime.resizeViewports();
   }
 
+  removeSelectedAnnotations(): void {
+    this.runtime.removeSelectedAnnotations();
+  }
+
+  undo(): void {
+    this.runtime.undo();
+  }
+
   scroll(viewportId: RuntimeViewportId, delta: number): void {
     this.runtime.scroll(viewportId, delta);
   }

@@ -3,6 +3,7 @@ import {
   RenderingEngine,
   imageLoader,
   cache,
+  utilities as coreUtilities,
   init as initCore,
   type Types as CoreTypes,
 } from "@cornerstonejs/core";
@@ -16,6 +17,7 @@ import {
   LengthTool,
   ProbeTool,
   addTool,
+  annotation,
   init as initTools,
   type Types as ToolTypes,
 } from "@cornerstonejs/tools";
@@ -501,6 +503,29 @@ export class CornerstoneViewportRuntime {
 
   resizeViewports(): void {
     this.renderingEngine?.resize();
+  }
+
+  removeSelectedAnnotations(): void {
+    const selected = annotation.selection.getAnnotationsSelected();
+    for (const uid of selected) {
+      annotation.state.removeAnnotation(uid);
+    }
+    this.renderAllMounted();
+  }
+
+  undo(): void {
+    const { DefaultHistoryMemo } = coreUtilities.HistoryMemo;
+    if (DefaultHistoryMemo.canUndo) {
+      DefaultHistoryMemo.undo();
+      this.renderAllMounted();
+    }
+  }
+
+  private renderAllMounted(): void {
+    for (const mounted of this.mounted.values()) {
+      const viewport = this.renderingEngine?.getStackViewport(mounted.viewportId);
+      viewport?.render();
+    }
   }
 
   private isLatestLoad(viewportId: RuntimeViewportId, loadVersion: number): boolean {

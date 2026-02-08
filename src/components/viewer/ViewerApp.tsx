@@ -134,6 +134,17 @@ export default function ViewerApp() {
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      const isTextInput = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement).isContentEditable;
+
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) {
+        if (!isTextInput) {
+          e.preventDefault();
+          session.undo();
+        }
+        return;
+      }
+
       const num = parseInt(e.key, 10);
       if (num >= 1 && num <= CT_PRESETS.length) {
         session.applyPreset(CT_PRESETS[num - 1]);
@@ -146,11 +157,16 @@ export default function ViewerApp() {
       if (e.key === "p") {
         session.setTool("Pan");
       }
-      if (e.key === "z") {
+      if (e.key === "z" && !e.metaKey && !e.ctrlKey) {
         session.setTool("Zoom");
       }
       if (e.key === "m") {
         session.setTool("Length");
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (!isTextInput) {
+          session.removeSelectedAnnotations();
+        }
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();

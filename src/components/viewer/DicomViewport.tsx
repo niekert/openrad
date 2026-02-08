@@ -57,6 +57,21 @@ export default function DicomViewport({
     void session.jumpToSlice(viewportId, jumpToSliceIndex);
   }, [jumpToSliceIndex, session, viewportId]);
 
+  // Resize the Cornerstone canvas when the container changes size
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const observer = new ResizeObserver(() => {
+      session.resizeViewports();
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [session]);
+
   return (
     <div className="relative flex-1 bg-black">
       {loading && (

@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useId } from "react";
-import { Enums, RenderingEngine, imageLoader, type StackViewport } from "@cornerstonejs/core";
+import { imageLoader, type StackViewport } from "@cornerstonejs/core";
 import type { Series } from "@/lib/dicom/types";
 import { getImageId } from "@/lib/cornerstone/custom-image-loader";
 import { logger } from "@/lib/debug";
+import type { ViewerSessionController } from "@/lib/viewer/runtime/viewer-session-controller";
 
 const log = logger("topogram");
-import { initCornerstone } from "@/lib/cornerstone/init";
 
 interface TopogramPanelProps {
-  sessionId: string;
+  session: ViewerSessionController;
   series: Series;
   currentSlicePosition: [number, number, number] | null;
   axialSlicePositions: ([number, number, number] | null)[] | null;
@@ -18,17 +18,21 @@ interface TopogramPanelProps {
 }
 
 export default function TopogramPanel({
-  sessionId,
+  session,
   series,
   currentSlicePosition,
   axialSlicePositions,
   onJumpToSlice,
 }: TopogramPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const renderingEngineRef = useRef<RenderingEngine | null>(null);
   const viewportRef = useRef<StackViewport | null>(null);
   const lineRef = useRef<HTMLDivElement>(null);
+  const currentSlicePositionRef = useRef<[number, number, number] | null>(null);
   const stableId = useId().replace(/:/g, "");
+
+  useEffect(() => {
+    currentSlicePositionRef.current = currentSlicePosition;
+  }, [currentSlicePosition]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -37,21 +41,19 @@ export default function TopogramPanel({
     }
 
     let destroyed = false;
+    const viewportId = `${stableId}-topogram`;
 
     const setup = async () => {
+      const sessionId = session.getSessionId();
       log.debug("setup start", { seriesUID: series.seriesInstanceUID, instances: series.instances.length });
 
-      const probeCanvas = document.createElement("canvas");
-      const webgl2 = probeCanvas.getContext("webgl2");
-      if (!webgl2) {
-        log.warn("no webgl2 support");
-        return;
-      }
-
-      await initCornerstone();
+      await session.registerTopogramViewport(viewportId, container);
 
       if (destroyed) {
         log.debug("setup aborted — destroyed during init");
+        // Don't unregister here: the next mount's registerTopogramViewport
+        // will disable-then-enable the same viewport ID, cleaning up safely.
+        // Unregistering here would race with mount 2's register in Strict Mode.
         return;
       }
 
@@ -62,22 +64,7 @@ export default function TopogramPanel({
         return;
       }
 
-      if (renderingEngineRef.current) {
-        renderingEngineRef.current.destroy();
-      }
-
-      const engineId = `${stableId}-engine`;
-      const viewportId = `${stableId}-viewport`;
-      const renderingEngine = new RenderingEngine(engineId);
-      renderingEngineRef.current = renderingEngine;
-
-      renderingEngine.enableElement({
-        viewportId,
-        type: Enums.ViewportType.STACK,
-        element: container,
-      });
-
-      const viewport = renderingEngine.getStackViewport(viewportId);
+      const viewport = session.getTopogramStackViewport(viewportId);
       viewportRef.current = viewport;
 
       await viewport.setStack(imageIds, 0);
@@ -99,12 +86,9 @@ export default function TopogramPanel({
       log.debug("cleanup");
       destroyed = true;
       viewportRef.current = null;
-      if (renderingEngineRef.current) {
-        renderingEngineRef.current.destroy();
-        renderingEngineRef.current = null;
-      }
+      session.unregisterTopogramViewport(viewportId);
     };
-  }, [series, sessionId, stableId]);
+  }, [series, session, stableId]);
 
   useEffect(() => {
     const line = lineRef.current;
@@ -142,21 +126,21 @@ export default function TopogramPanel({
 
     const observer = new ResizeObserver(() => {
       const viewport = viewportRef.current;
-      const renderingEngine = renderingEngineRef.current;
-      if (!viewport || !renderingEngine) {
+      if (!viewport) {
         return;
       }
 
-      renderingEngine.resize();
+      session.resizeViewports();
       viewport.resetCamera();
       viewport.render();
 
-      if (!currentSlicePosition || !lineRef.current) {
+      const latestSlicePosition = currentSlicePositionRef.current;
+      if (!latestSlicePosition || !lineRef.current) {
         return;
       }
 
       try {
-        const canvasPoint = viewport.worldToCanvas(currentSlicePosition);
+        const canvasPoint = viewport.worldToCanvas(latestSlicePosition);
         const y = canvasPoint[1];
         if (y >= 0 && y <= container.clientHeight) {
           lineRef.current.style.display = "block";
@@ -171,7 +155,7 @@ export default function TopogramPanel({
 
     observer.observe(container);
     return () => observer.disconnect();
-  }, [currentSlicePosition]);
+  }, [session]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {

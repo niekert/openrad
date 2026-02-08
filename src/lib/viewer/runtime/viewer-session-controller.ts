@@ -218,6 +218,22 @@ export class ViewerSessionController {
     this.store.dispatch({ type: "panel/setWidth", panelId, width });
   }
 
+  async registerTopogramViewport(viewportId: string, element: HTMLDivElement): Promise<void> {
+    await this.runtime.enableTopogramViewport(viewportId, element);
+  }
+
+  unregisterTopogramViewport(viewportId: string): void {
+    this.runtime.disableTopogramViewport(viewportId);
+  }
+
+  getTopogramStackViewport(viewportId: string) {
+    return this.runtime.getTopogramStackViewport(viewportId);
+  }
+
+  resizeViewports(): void {
+    this.runtime.resizeViewports();
+  }
+
   async jumpToSlice(viewportId: RuntimeViewportId, index: number): Promise<void> {
     this.store.dispatch({ type: "viewport/setJumpTo", viewportId, index });
     await this.runtime.jumpToSlice(viewportId, index);

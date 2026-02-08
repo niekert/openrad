@@ -317,7 +317,7 @@ export default function ViewerApp() {
                     onWidthChange={(width) => session.setPanelWidth("topogram", width)}
                   >
                     <TopogramPanel
-                      sessionId={session.getSessionId()}
+                      session={session}
                       series={topogramSeries}
                       currentSlicePosition={state.viewports.primary.position}
                       axialSlicePositions={state.viewports.primary.axialPositions}

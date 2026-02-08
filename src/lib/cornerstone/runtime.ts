@@ -444,6 +444,40 @@ export class CornerstoneViewportRuntime {
     return this.mounted.has(viewportId);
   }
 
+  async enableTopogramViewport(
+    viewportId: string,
+    element: HTMLDivElement,
+  ): Promise<void> {
+    await initCornerstoneRuntime();
+    // Disable first to handle re-registration (e.g., React Strict Mode
+    // double-mount where a stale async setup left a viewport enabled).
+    this.disableTopogramViewport(viewportId);
+    this.getEngine().enableElement({
+      viewportId,
+      type: CoreEnums.ViewportType.STACK,
+      element,
+    });
+  }
+
+  disableTopogramViewport(viewportId: string): void {
+    if (!this.renderingEngine) {
+      return;
+    }
+    try {
+      this.renderingEngine.disableElement(viewportId);
+    } catch {
+      // viewport may already be disabled
+    }
+  }
+
+  getTopogramStackViewport(viewportId: string) {
+    return this.getEngine().getStackViewport(viewportId);
+  }
+
+  resizeViewports(): void {
+    this.renderingEngine?.resize();
+  }
+
   private isLatestLoad(viewportId: RuntimeViewportId, loadVersion: number): boolean {
     const mounted = this.mounted.get(viewportId);
     return !!mounted && mounted.currentLoadVersion === loadVersion;

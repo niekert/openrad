@@ -5,6 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import type { FileUIPart, UIMessage } from "ai";
 import type { ViewerSessionController } from "@/lib/viewer/runtime/viewer-session-controller";
 import type { ViewerStateSnapshot } from "@/lib/viewer/state/types";
+import { MessageResponse } from "@/components/ai-elements/message";
 import ResizeHandle from "./ResizeHandle";
 
 interface AIChatPanelProps {
@@ -254,10 +255,17 @@ function ChatMessage({ message, snapshot, onRestore }: ChatMessageProps) {
             const text = isUser
               ? part.text.replace(/^\[Viewer state:.*?\]\n\n/, "")
               : part.text;
+            if (isUser) {
+              return (
+                <div key={i} className="whitespace-pre-wrap break-words">
+                  {text}
+                </div>
+              );
+            }
             return (
-              <div key={i} className="whitespace-pre-wrap break-words">
+              <MessageResponse key={i} className="break-words text-xs">
                 {text}
-              </div>
+              </MessageResponse>
             );
           }
           return null;

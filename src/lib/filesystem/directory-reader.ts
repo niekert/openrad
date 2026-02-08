@@ -9,29 +9,34 @@ export async function pickDirectory(): Promise<FileSystemDirectoryHandle> {
 }
 
 export async function queryReadPermission(
-  handle: FileSystemDirectoryHandle
+  handle: FileSystemDirectoryHandle,
 ): Promise<PermissionState> {
   return handle.queryPermission({ mode: "read" });
 }
 
-export async function requestReadPermission(
-  handle: FileSystemDirectoryHandle
+export function requestReadPermission(
+  handle: FileSystemDirectoryHandle,
 ): Promise<PermissionState> {
   return handle.requestPermission({ mode: "read" });
 }
 
 export async function readAllFilesFromDirectory(
   handle: FileSystemDirectoryHandle,
-  onProgress?: (readCount: number) => void
+  onProgress?: (readCount: number) => void,
 ): Promise<File[]> {
   const files: File[] = [];
   let readCount = 0;
 
-  const walk = async (dir: FileSystemDirectoryHandle, pathSegments: string[]): Promise<void> => {
+  const walk = async (
+    dir: FileSystemDirectoryHandle,
+    pathSegments: string[],
+  ): Promise<void> => {
     for await (const entry of dir.values()) {
       if (entry.kind === "file") {
         const file = await entry.getFile();
-        const relativePath = [handle.name, ...pathSegments, entry.name].join("/");
+        const relativePath = [handle.name, ...pathSegments, entry.name].join(
+          "/",
+        );
         setFileRelativePath(file, relativePath);
         files.push(file);
         readCount += 1;

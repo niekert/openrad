@@ -27,7 +27,10 @@ const rateLimitStore =
   globalThis.__openradChatRateLimit ?? new Map<string, RateWindow>();
 globalThis.__openradChatRateLimit = rateLimitStore;
 
-function jsonResponse(status: number, payload: Record<string, string>): Response {
+function jsonResponse(
+  status: number,
+  payload: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "Content-Type": "application/json" },
@@ -164,7 +167,8 @@ export async function POST(req: Request) {
   const latestUserMessage = getLatestUserMessage(messages);
   if (!latestUserMessage || !isValidViewerRequest(latestUserMessage)) {
     return jsonResponse(400, {
-      error: "Message must include viewer context and at least one JPEG viewport screenshot",
+      error:
+        "Message must include viewer context and at least one JPEG viewport screenshot",
     });
   }
 
@@ -178,7 +182,7 @@ export async function POST(req: Request) {
   );
 
   const result = streamText({
-    model: openrouter("anthropic/claude-sonnet-4-20250514"),
+    model: openrouter("anthropic/claude-sonnet-4.5"),
     system:
       "You are an AI imaging assistant for OpenRad, a local DICOM viewer. Focus on the provided viewer screenshots and context. Do not provide definitive diagnoses. Include a short reminder that findings are assistive only and require review by a licensed clinician.",
     messages: modelMessages,

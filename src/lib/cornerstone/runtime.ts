@@ -461,6 +461,14 @@ export class CornerstoneViewportRuntime {
     return this.mounted.has(viewportId);
   }
 
+  captureScreenshot(viewportId: RuntimeViewportId): string | null {
+    const mounted = this.mounted.get(viewportId);
+    if (!mounted) return null;
+    const canvas = mounted.element.querySelector("canvas");
+    if (!canvas) return null;
+    return canvas.toDataURL("image/jpeg", 0.85);
+  }
+
   async enableTopogramViewport(
     viewportId: string,
     element: HTMLDivElement,

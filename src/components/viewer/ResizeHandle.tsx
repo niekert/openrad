@@ -5,9 +5,11 @@ import { useCallback, useRef } from "react";
 interface ResizeHandleProps {
   onResize: (newWidth: number) => void;
   startWidth: number;
+  /** Which side the handle is on. "right" (default) means panel grows rightward; "left" means panel grows leftward. */
+  side?: "right" | "left";
 }
 
-export default function ResizeHandle({ onResize, startWidth }: ResizeHandleProps) {
+export default function ResizeHandle({ onResize, startWidth, side = "right" }: ResizeHandleProps) {
   const startXRef = useRef(0);
   const startWidthRef = useRef(startWidth);
 
@@ -18,7 +20,8 @@ export default function ResizeHandle({ onResize, startWidth }: ResizeHandleProps
       startWidthRef.current = startWidth;
 
       const handleMouseMove = (ev: MouseEvent) => {
-        const delta = ev.clientX - startXRef.current;
+        const rawDelta = ev.clientX - startXRef.current;
+        const delta = side === "left" ? -rawDelta : rawDelta;
         const newWidth = Math.max(120, Math.min(600, startWidthRef.current + delta));
         onResize(newWidth);
       };
@@ -35,7 +38,7 @@ export default function ResizeHandle({ onResize, startWidth }: ResizeHandleProps
       document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     },
-    [onResize, startWidth]
+    [onResize, startWidth, side]
   );
 
   return (

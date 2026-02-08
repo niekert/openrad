@@ -4,7 +4,7 @@ import type { RecentDirectoryEntry } from "@/lib/filesystem/persistent-directori
 import type { ToolName } from "@/components/viewer/Toolbar";
 
 export type ViewportId = "primary" | "compare";
-export type PanelId = "topogram" | "compare";
+export type PanelId = "topogram" | "compare" | "ai";
 
 export interface ProgressState {
   done: number;
@@ -40,6 +40,17 @@ export interface ViewerFsState {
 export interface ViewerPanelsState {
   open: ReadonlySet<PanelId>;
   widths: Record<PanelId, number>;
+}
+
+export interface ViewerStateSnapshot {
+  activeSeriesUID: string | null;
+  compareSeriesUID: string | null;
+  primarySliceIndex: number;
+  compareSliceIndex: number;
+  windowWidth: number;
+  windowCenter: number;
+  panelsOpen: PanelId[];
+  screenshots: Record<string, string>;
 }
 
 export interface ViewerState {

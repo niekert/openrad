@@ -30,7 +30,7 @@ import {
   type ViewerToolName,
 } from "@/lib/cornerstone/runtime";
 import type { ViewerStore } from "@/lib/viewer/state/store";
-import type { PanelId } from "@/lib/viewer/state/types";
+import type { PanelId, ViewerStateSnapshot } from "@/lib/viewer/state/types";
 
 function isPermissionDeniedError(error: unknown): boolean {
   if (error instanceof DOMException) {
@@ -252,6 +252,74 @@ export class ViewerSessionController {
   selectCompareSeries(seriesUID: string | null): void {
     this.store.dispatch({ type: "series/setCompare", seriesUID });
     void this.setViewportSeries("compare", seriesUID);
+  }
+
+  captureAllScreenshots(): Record<string, string> {
+    const screenshots: Record<string, string> = {};
+    const primary = this.runtime.captureScreenshot("primary");
+    if (primary) screenshots["primary"] = primary;
+    const compare = this.runtime.captureScreenshot("compare");
+    if (compare) screenshots["compare"] = compare;
+    return screenshots;
+  }
+
+  captureViewerSnapshot(): ViewerStateSnapshot {
+    const state = this.store.getSnapshot();
+    const screenshots = this.captureAllScreenshots();
+    return {
+      activeSeriesUID: state.activeSeriesUID,
+      compareSeriesUID: state.compareSeriesUID,
+      primarySliceIndex: state.viewports.primary.currentIndex,
+      compareSliceIndex: state.viewports.compare.currentIndex,
+      windowWidth: state.viewports.primary.windowWidth,
+      windowCenter: state.viewports.primary.windowCenter,
+      panelsOpen: [...state.panels.open],
+      screenshots,
+    };
+  }
+
+  async restoreViewerSnapshot(snapshot: ViewerStateSnapshot): Promise<void> {
+    if (snapshot.activeSeriesUID !== this.store.getSnapshot().activeSeriesUID) {
+      this.store.dispatch({ type: "series/setActive", seriesUID: snapshot.activeSeriesUID });
+      await this.setViewportSeries("primary", snapshot.activeSeriesUID);
+    }
+
+    if (snapshot.compareSeriesUID !== this.store.getSnapshot().compareSeriesUID) {
+      this.store.dispatch({ type: "series/setCompare", seriesUID: snapshot.compareSeriesUID });
+      await this.setViewportSeries("compare", snapshot.compareSeriesUID);
+    }
+
+    await this.runtime.jumpToSlice("primary", snapshot.primarySliceIndex);
+    if (snapshot.compareSeriesUID) {
+      await this.runtime.jumpToSlice("compare", snapshot.compareSliceIndex);
+    }
+
+    this.runtime.setWindowAll(snapshot.windowWidth, snapshot.windowCenter);
+    this.store.dispatch({
+      type: "viewport/setWindow",
+      viewportId: "primary",
+      width: snapshot.windowWidth,
+      center: snapshot.windowCenter,
+    });
+    this.store.dispatch({
+      type: "viewport/setWindow",
+      viewportId: "compare",
+      width: snapshot.windowWidth,
+      center: snapshot.windowCenter,
+    });
+
+    const currentOpen = this.store.getSnapshot().panels.open;
+    const targetOpen = new Set<PanelId>(snapshot.panelsOpen);
+    for (const id of currentOpen) {
+      if (!targetOpen.has(id)) {
+        this.store.dispatch({ type: "panel/setOpen", panelId: id, open: false });
+      }
+    }
+    for (const id of targetOpen) {
+      if (!currentOpen.has(id)) {
+        this.store.dispatch({ type: "panel/setOpen", panelId: id, open: true });
+      }
+    }
   }
 
   openNew(): void {

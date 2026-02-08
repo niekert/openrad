@@ -27,6 +27,8 @@ import TopogramPanel from "./TopogramPanel";
 import PanelActivityBar from "./PanelActivityBar";
 import PanelContainer from "./PanelContainer";
 import PriorSelectorPanel from "./PriorSelectorPanel";
+import RightActivityBar from "./RightActivityBar";
+import AIChatPanel from "./AIChatPanel";
 
 export default function ViewerApp() {
   const [store] = useState(() => createViewerStore());
@@ -163,7 +165,7 @@ export default function ViewerApp() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [session]);
 
-  const panels = useMemo(
+  const leftPanels = useMemo(
     () => [
       {
         id: "topogram",
@@ -195,6 +197,24 @@ export default function ViewerApp() {
     [topogramSeries, activeSeries]
   );
 
+  const rightPanels = useMemo(
+    () => [
+      {
+        id: "ai",
+        title: "AI Chat",
+        available: FEATURES.aiChat && !!activeSeries,
+        icon: (
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M8 10h8" />
+            <path d="M8 13h4" />
+          </svg>
+        ),
+      },
+    ],
+    [activeSeries]
+  );
+
   const handleToolChange = useCallback(
     (tool: ToolName) => {
       session.setTool(tool);
@@ -215,7 +235,7 @@ export default function ViewerApp() {
 
   const handlePanelToggle = useCallback(
     (id: string) => {
-      if (id === "topogram" || id === "compare") {
+      if (id === "topogram" || id === "compare" || id === "ai") {
         if (id === "compare" && state.panels.open.has("compare")) {
           setPriorSelectorRequested(false);
         }
@@ -314,7 +334,7 @@ export default function ViewerApp() {
               />
               <div className="flex flex-1 overflow-hidden">
                 <PanelActivityBar
-                  panels={panels}
+                  panels={leftPanels}
                   activePanelIds={state.panels.open}
                   onPanelToggle={handlePanelToggle}
                 />
@@ -395,6 +415,24 @@ export default function ViewerApp() {
                     jumpToSliceIndex={state.viewports.primary.jumpToIndex}
                   />
                 )}
+
+                {state.panels.open.has("ai") && (
+                  <AIChatPanel
+                    width={state.panels.widths.ai}
+                    onWidthChange={(w) => session.setPanelWidth("ai", w)}
+                    session={session}
+                    primarySliceIndex={state.viewports.primary.currentIndex}
+                    primaryTotal={state.viewports.primary.total}
+                    windowWidth={state.viewports.primary.windowWidth}
+                    windowCenter={state.viewports.primary.windowCenter}
+                    compareOpen={comparePanelOpen}
+                  />
+                )}
+                <RightActivityBar
+                  panels={rightPanels}
+                  activePanelIds={state.panels.open}
+                  onPanelToggle={handlePanelToggle}
+                />
               </div>
               <StatusBar
                 currentSlice={state.viewports.primary.currentIndex + 1}

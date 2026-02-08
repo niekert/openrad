@@ -42,6 +42,7 @@ export function createInitialViewerState(): ViewerState {
       widths: {
         topogram: 200,
         compare: 320,
+        ai: 380,
       },
     },
     viewports: {

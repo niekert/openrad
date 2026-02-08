@@ -53,4 +53,6 @@ export type ViewerAction =
       viewportId: ViewportId;
       index: number | null;
     }
+  | { type: "compare/setOffset"; offset: number }
+  | { type: "compare/resetOffset" }
   | { type: "viewer/reset" };

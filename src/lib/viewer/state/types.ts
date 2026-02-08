@@ -57,6 +57,7 @@ export interface ViewerState {
   studyTree: StudyTree | null;
   activeSeriesUID: string | null;
   compareSeriesUID: string | null;
+  compareOffset: number;
   activeTool: ToolName;
   activePreset: WindowPreset;
   presetTrigger: WindowPreset | null;

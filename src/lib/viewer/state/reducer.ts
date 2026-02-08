@@ -23,6 +23,7 @@ export function createInitialViewerState(): ViewerState {
     studyTree: null,
     activeSeriesUID: null,
     compareSeriesUID: null,
+    compareOffset: 0,
     activeTool: "WindowLevel",
     activePreset: CT_PRESETS[0],
     presetTrigger: null,
@@ -81,6 +82,7 @@ export function viewerReducer(state: ViewerState, action: ViewerAction): ViewerS
         ...state,
         activeSeriesUID: action.seriesUID,
         compareSeriesUID: null,
+        compareOffset: 0,
         viewports: {
           ...state.viewports,
           primary: {
@@ -107,6 +109,7 @@ export function viewerReducer(state: ViewerState, action: ViewerAction): ViewerS
       return {
         ...state,
         compareSeriesUID: action.seriesUID,
+        compareOffset: 0,
         viewports: {
           ...state.viewports,
           compare: {
@@ -267,12 +270,19 @@ export function viewerReducer(state: ViewerState, action: ViewerAction): ViewerS
         },
       };
 
+    case "compare/setOffset":
+      return { ...state, compareOffset: action.offset };
+
+    case "compare/resetOffset":
+      return { ...state, compareOffset: 0 };
+
     case "viewer/reset":
       return {
         ...state,
         studyTree: null,
         activeSeriesUID: null,
         compareSeriesUID: null,
+        compareOffset: 0,
         panels: {
           ...state.panels,
           open: new Set(),

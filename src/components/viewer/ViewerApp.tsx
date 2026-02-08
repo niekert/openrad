@@ -18,6 +18,7 @@ import {
   ViewerSessionController,
   formatViewerLoadError,
 } from "@/lib/viewer/runtime/viewer-session-controller";
+import { clearCompareOffset } from "@/lib/viewer/compare-offset-store";
 import FileDropZone from "./FileDropZone";
 import StudyBrowser from "./StudyBrowser";
 import Toolbar, { type ToolName } from "./Toolbar";
@@ -153,11 +154,13 @@ export default function ViewerApp() {
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        session.scroll("primary", 1);
+        const target = session.getHoveredViewport() ?? "primary";
+        session.scroll(target, 1);
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
-        session.scroll("primary", -1);
+        const target = session.getHoveredViewport() ?? "primary";
+        session.scroll(target, -1);
       }
     };
 
@@ -356,10 +359,24 @@ export default function ViewerApp() {
 
                 {comparePanelOpen ? (
                   <div className="grid flex-1 grid-cols-2 overflow-hidden">
-                    <div className="flex min-w-0 flex-col border-r border-border">
+                    <div className="flex min-w-0 flex-col border-r border-border" onMouseEnter={() => session.setHoveredViewport("compare")}>
                       <div className="flex h-8 items-center justify-between border-b border-border px-3 text-[11px] text-muted">
                         <span className="uppercase tracking-widest">Prior</span>
                         <div className="flex items-center gap-2">
+                          {state.compareOffset !== 0 && (
+                            <button
+                              onClick={() => {
+                                store.dispatch({ type: "compare/resetOffset" });
+                                if (state.activeSeriesUID && state.compareSeriesUID) {
+                                  clearCompareOffset(state.activeSeriesUID, state.compareSeriesUID);
+                                }
+                              }}
+                              className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] text-accent transition-colors hover:bg-accent/30"
+                              title="Click to reset sync offset"
+                            >
+                              {state.compareOffset > 0 ? "+" : ""}{state.compareOffset}
+                            </button>
+                          )}
                           <span>
                             {compareSeries
                               ? `${compareStudy?.studyDate ? formatDate(compareStudy.studyDate) : ""}${
@@ -394,7 +411,7 @@ export default function ViewerApp() {
                         />
                       )}
                     </div>
-                    <div className="flex min-w-0 flex-col">
+                    <div className="flex min-w-0 flex-col" onMouseEnter={() => session.setHoveredViewport("primary")}>
                       <div className="flex h-8 items-center justify-between border-b border-border px-3 text-[11px] text-muted">
                         <span className="uppercase tracking-widest">Current</span>
                         <span>{activeStudy?.studyDate ? formatDate(activeStudy.studyDate) : ""}</span>

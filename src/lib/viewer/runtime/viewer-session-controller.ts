@@ -31,6 +31,7 @@ import {
 } from "@/lib/cornerstone/runtime";
 import type { ViewerStore } from "@/lib/viewer/state/store";
 import type { PanelId, ViewerStateSnapshot } from "@/lib/viewer/state/types";
+import { loadCompareOffset, saveCompareOffset } from "@/lib/viewer/compare-offset-store";
 
 function isPermissionDeniedError(error: unknown): boolean {
   if (error instanceof DOMException) {
@@ -69,6 +70,9 @@ export class ViewerSessionController {
   private readonly runtime: CornerstoneViewportRuntime;
   private pickerTask: Promise<void> | null = null;
   private syncingWindow = false;
+  private syncingCompare = false;
+  private lastSyncedCompareIndex: number | null = null;
+  private hoveredViewport: RuntimeViewportId | null = null;
 
   constructor(store: ViewerStore, sessionId = crypto.randomUUID()) {
     this.store = store;
@@ -88,6 +92,8 @@ export class ViewerSessionController {
 
         if (viewportId === "primary") {
           this.syncPrimaryToCompare(currentIndex, total, position);
+        } else if (viewportId === "compare" && !this.syncingCompare) {
+          this.handleCompareUserScroll(currentIndex);
         }
       },
       onWindowChange: (viewportId, width, center) => {
@@ -238,6 +244,14 @@ export class ViewerSessionController {
     this.runtime.scroll(viewportId, delta);
   }
 
+  setHoveredViewport(viewportId: RuntimeViewportId | null): void {
+    this.hoveredViewport = viewportId;
+  }
+
+  getHoveredViewport(): RuntimeViewportId | null {
+    return this.hoveredViewport;
+  }
+
   async jumpToSlice(viewportId: RuntimeViewportId, index: number): Promise<void> {
     this.store.dispatch({ type: "viewport/setJumpTo", viewportId, index });
     await this.runtime.jumpToSlice(viewportId, index);
@@ -252,6 +266,14 @@ export class ViewerSessionController {
   selectCompareSeries(seriesUID: string | null): void {
     this.store.dispatch({ type: "series/setCompare", seriesUID });
     void this.setViewportSeries("compare", seriesUID);
+
+    const state = this.store.getSnapshot();
+    if (seriesUID && state.activeSeriesUID) {
+      const offset = loadCompareOffset(state.activeSeriesUID, seriesUID);
+      if (offset !== 0) {
+        this.store.dispatch({ type: "compare/setOffset", offset });
+      }
+    }
   }
 
   captureAllScreenshots(): Record<string, string> {
@@ -596,8 +618,34 @@ export class ViewerSessionController {
       return;
     }
 
+    // Apply user offset
+    const offset = state.compareOffset;
+    mapped = Math.max(0, Math.min(compare.total - 1, mapped + offset));
+
+    // Track what we expect compare to be at (for offset detection)
+    this.lastSyncedCompareIndex = mapped;
+
+    this.syncingCompare = true;
     this.store.dispatch({ type: "viewport/setJumpTo", viewportId: "compare", index: mapped });
-    void this.runtime.jumpToSlice("compare", mapped);
+    void this.runtime.jumpToSlice("compare", mapped).finally(() => {
+      this.syncingCompare = false;
+    });
+  }
+
+  private handleCompareUserScroll(currentIndex: number): void {
+    if (this.lastSyncedCompareIndex == null) return;
+
+    const newOffset = currentIndex - this.lastSyncedCompareIndex +
+      this.store.getSnapshot().compareOffset;
+
+    this.store.dispatch({ type: "compare/setOffset", offset: newOffset });
+    this.lastSyncedCompareIndex = currentIndex;
+
+    // Persist to localStorage
+    const state = this.store.getSnapshot();
+    if (state.activeSeriesUID && state.compareSeriesUID) {
+      saveCompareOffset(state.activeSeriesUID, state.compareSeriesUID, newOffset);
+    }
   }
 }
 

@@ -33,7 +33,7 @@ export default function StudyBrowser({
         Studies
       </div>
       <div className="flex-1 overflow-y-auto p-2">
-        {studyTree.studies.map((study) => {
+        {[...studyTree.studies].sort((a, b) => (b.studyDate || "").localeCompare(a.studyDate || "")).map((study) => {
           const expanded = expandedStudies.has(study.studyInstanceUID);
           return (
             <div key={study.studyInstanceUID} className="mb-1">

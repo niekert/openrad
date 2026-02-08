@@ -153,10 +153,6 @@ function sortStudies(a: CandidateStudy, b: CandidateStudy, activeStudy: Study | 
   const bSamePatient = isSamePatient(b, activeStudy);
   if (aSamePatient !== bSamePatient) return aSamePatient ? -1 : 1;
 
-  const aBefore = isOlder(a.studyDate, activeStudy?.studyDate);
-  const bBefore = isOlder(b.studyDate, activeStudy?.studyDate);
-  if (aBefore !== bBefore) return aBefore ? -1 : 1;
-
   return (b.studyDate || "").localeCompare(a.studyDate || "");
 }
 
@@ -166,11 +162,6 @@ function isSamePatient(study: CandidateStudy, activeStudy: Study | undefined): b
     return study.patientID === activeStudy.patientID;
   }
   return study.patientName === activeStudy.patientName;
-}
-
-function isOlder(date: string, activeDate: string | undefined): boolean {
-  if (!date || !activeDate) return false;
-  return date < activeDate;
 }
 
 function formatDate(dicomDate: string): string {

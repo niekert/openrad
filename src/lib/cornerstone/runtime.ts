@@ -428,6 +428,23 @@ export class CornerstoneViewportRuntime {
     viewport.render();
   }
 
+  scroll(viewportId: RuntimeViewportId, delta: number): void {
+    if (!this.mounted.has(viewportId)) return;
+
+    const stackViewport = this.getEngine().getStackViewport(viewportId);
+    stackViewport.scroll(delta);
+
+    const currentIndex = stackViewport.getCurrentImageIdIndex();
+    const imageIds = stackViewport.getImageIds();
+    const imageId = imageIds[currentIndex];
+    this.callbacks.onSliceChange(
+      viewportId,
+      currentIndex,
+      imageIds.length,
+      imageId ? getPosition(imageId) : null,
+    );
+  }
+
   async jumpToSlice(
     viewportId: RuntimeViewportId,
     index: number,

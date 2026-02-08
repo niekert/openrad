@@ -234,6 +234,10 @@ export class ViewerSessionController {
     this.runtime.resizeViewports();
   }
 
+  scroll(viewportId: RuntimeViewportId, delta: number): void {
+    this.runtime.scroll(viewportId, delta);
+  }
+
   async jumpToSlice(viewportId: RuntimeViewportId, index: number): Promise<void> {
     this.store.dispatch({ type: "viewport/setJumpTo", viewportId, index });
     await this.runtime.jumpToSlice(viewportId, index);

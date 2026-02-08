@@ -149,6 +149,14 @@ export default function ViewerApp() {
       if (e.key === "m") {
         session.setTool("Length");
       }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        session.scroll("primary", 1);
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        session.scroll("primary", -1);
+      }
     };
 
     window.addEventListener("keydown", handleKey);

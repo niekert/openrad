@@ -35,6 +35,9 @@ import type { ViewerStore } from "@/lib/viewer/state/store";
 import type { PanelId, ViewerStateSnapshot } from "@/lib/viewer/state/types";
 import { loadCompareOffset, saveCompareOffset } from "@/lib/viewer/compare-offset-store";
 
+const MAX_COMPARE_OFFSET_STEP = 8;
+const MAX_RESTORED_COMPARE_OFFSET = 200;
+
 function isPermissionDeniedError(error: unknown): boolean {
   if (error instanceof DOMException) {
     return error.name === "NotAllowedError" || error.name === "SecurityError";
@@ -286,8 +289,13 @@ export class ViewerSessionController {
     const state = this.store.getSnapshot();
     if (seriesUID && state.activeSeriesUID) {
       const offset = loadCompareOffset(state.activeSeriesUID, seriesUID);
-      if (offset !== 0) {
-        this.store.dispatch({ type: "compare/setOffset", offset });
+      const restoredOffset = Math.abs(offset) <= MAX_RESTORED_COMPARE_OFFSET ? offset : 0;
+      if (restoredOffset !== 0) {
+        this.store.dispatch({ type: "compare/setOffset", offset: restoredOffset });
+      }
+
+      if (restoredOffset !== offset) {
+        saveCompareOffset(state.activeSeriesUID, seriesUID, restoredOffset);
       }
     }
   }
@@ -680,8 +688,14 @@ export class ViewerSessionController {
 
     if (this.lastSyncedCompareIndex == null) return;
 
-    const newOffset = currentIndex - this.lastSyncedCompareIndex +
-      state.compareOffset;
+    const delta = currentIndex - this.lastSyncedCompareIndex;
+    if (Math.abs(delta) > MAX_COMPARE_OFFSET_STEP) {
+      // Ignore large jumps caused by internal stack events during series load.
+      this.lastSyncedCompareIndex = currentIndex;
+      return;
+    }
+
+    const newOffset = delta + state.compareOffset;
 
     this.store.dispatch({ type: "compare/setOffset", offset: newOffset });
     this.lastSyncedCompareIndex = currentIndex;

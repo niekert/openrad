@@ -79,6 +79,15 @@ export function buildSystemPrompt(metadata: StudyMetadata): string {
     sections.push(spLines.join("\n"));
   }
 
+  if (metadata.patientContext) {
+    const contextLines: string[] = ["## Patient Context (User Added)"];
+    contextLines.push(`- ${metadata.patientContext.text}`);
+    if (metadata.patientContext.updatedAt) {
+      contextLines.push(`- Updated at: ${metadata.patientContext.updatedAt}`);
+    }
+    sections.push(contextLines.join("\n"));
+  }
+
   // Guidelines
   sections.push(`## Guidelines
 - For simple questions about the current view, analyze the attached screenshot directly. Do not call tools unnecessarily.

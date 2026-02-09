@@ -40,6 +40,7 @@ interface MessageSnapshot {
 
 const MAX_STORED_SNAPSHOTS = 30;
 const AI_CHAT_NOTICE_DISMISSED_KEY = "openrad.aiChatNoticeDismissed";
+const MAX_MEDICAL_CONTEXT_CHARS = 4000;
 
 function formatSliceInfo(snapshot: ViewerStateSnapshot): string {
   const parts: string[] = [];
@@ -48,6 +49,14 @@ function formatSliceInfo(snapshot: ViewerStateSnapshot): string {
     `WW:${Math.round(snapshot.windowWidth)} WC:${Math.round(snapshot.windowCenter)}`,
   );
   return parts.join(" · ");
+}
+
+function formatTimestamp(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return iso;
+  }
+  return date.toLocaleString();
 }
 
 function rewriteOpenRadLinksForDisplay(text: string): string {
@@ -133,6 +142,9 @@ export default function AIChatPanel({
     }
     return window.localStorage.getItem(AI_CHAT_NOTICE_DISMISSED_KEY) !== "true";
   });
+  const [medicalContextInput, setMedicalContextInput] = useState("");
+  const [medicalContextStatus, setMedicalContextStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [medicalContextError, setMedicalContextError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatMessagesRef = useRef<UIMessage[]>([]);
@@ -205,10 +217,27 @@ export default function AIChatPanel({
   });
 
   const isStreaming = status === "streaming" || status === "submitted";
+  const activeRecent = viewerState.fs.recentDirectories.find(
+    (entry) => entry.id === viewerState.fs.activeRecentId,
+  ) ?? null;
+  const persistedMedicalContext = activeRecent?.medicalContext ?? "";
+  const persistedMedicalContextTrimmed = persistedMedicalContext.trim();
+  const canPersistMedicalContext = !!viewerState.fs.activeRecentId;
+  const trimmedMedicalContextInput = medicalContextInput.trim();
+  const hasMedicalContextChanges =
+    trimmedMedicalContextInput !== persistedMedicalContextTrimmed;
+  const overMedicalContextLimit =
+    medicalContextInput.length > MAX_MEDICAL_CONTEXT_CHARS;
 
   useEffect(() => {
     chatMessagesRef.current = messages;
   }, [messages]);
+
+  useEffect(() => {
+    setMedicalContextInput(persistedMedicalContext);
+    setMedicalContextStatus("idle");
+    setMedicalContextError(null);
+  }, [viewerState.fs.activeRecentId, persistedMedicalContext]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -218,6 +247,63 @@ export default function AIChatPanel({
     window.localStorage.setItem(AI_CHAT_NOTICE_DISMISSED_KEY, "true");
     setShowPrivacyNotice(false);
   }, []);
+
+  const handleSaveMedicalContext = useCallback(async () => {
+    if (!canPersistMedicalContext) {
+      setMedicalContextStatus("error");
+      setMedicalContextError("Open a folder root to persist patient context.");
+      return;
+    }
+
+    if (overMedicalContextLimit) {
+      setMedicalContextStatus("error");
+      setMedicalContextError(`Context must be ${MAX_MEDICAL_CONTEXT_CHARS} characters or less.`);
+      return;
+    }
+
+    setMedicalContextStatus("saving");
+    setMedicalContextError(null);
+    try {
+      const saved = await session.saveActiveRecentMedicalContext(medicalContextInput);
+      if (!saved) {
+        setMedicalContextStatus("error");
+        setMedicalContextError("No active study root is available for persistence.");
+        return;
+      }
+      setMedicalContextStatus("saved");
+    } catch (error: unknown) {
+      setMedicalContextStatus("error");
+      setMedicalContextError(
+        error instanceof Error ? error.message : "Failed to save patient context.",
+      );
+    }
+  }, [canPersistMedicalContext, overMedicalContextLimit, session, medicalContextInput]);
+
+  const handleClearMedicalContext = useCallback(async () => {
+    setMedicalContextInput("");
+    if (!canPersistMedicalContext) {
+      setMedicalContextStatus("idle");
+      setMedicalContextError(null);
+      return;
+    }
+
+    setMedicalContextStatus("saving");
+    setMedicalContextError(null);
+    try {
+      const cleared = await session.clearActiveRecentMedicalContext();
+      if (!cleared) {
+        setMedicalContextStatus("error");
+        setMedicalContextError("No active study root is available for persistence.");
+        return;
+      }
+      setMedicalContextStatus("saved");
+    } catch (error: unknown) {
+      setMedicalContextStatus("error");
+      setMedicalContextError(
+        error instanceof Error ? error.message : "Failed to clear patient context.",
+      );
+    }
+  }, [canPersistMedicalContext, session]);
 
   const pendingSnapshotRef = useRef<ViewerStateSnapshot | null>(null);
 
@@ -425,6 +511,17 @@ export default function AIChatPanel({
           <ChatInput
             onSend={handleSend}
             isStreaming={isStreaming}
+            medicalContext={medicalContextInput}
+            onMedicalContextChange={setMedicalContextInput}
+            onSaveMedicalContext={handleSaveMedicalContext}
+            onClearMedicalContext={handleClearMedicalContext}
+            canPersistMedicalContext={canPersistMedicalContext}
+            medicalContextStatus={medicalContextStatus}
+            medicalContextError={medicalContextError}
+            medicalContextUpdatedAt={activeRecent?.medicalContextUpdatedAt ?? null}
+            overMedicalContextLimit={overMedicalContextLimit}
+            hasMedicalContextChanges={hasMedicalContextChanges}
+            maxMedicalContextChars={MAX_MEDICAL_CONTEXT_CHARS}
             viewportInfo={`Slice ${primarySliceIndex + 1}${primaryTotal > 0 ? `/${primaryTotal}` : ""} · WW:${Math.round(windowWidth)} WC:${Math.round(windowCenter)}${compareOpen ? " · Compare" : ""}`}
           />
         </div>
@@ -694,10 +791,37 @@ interface ChatInputProps {
   onSend: (text: string) => void;
   isStreaming: boolean;
   viewportInfo: string;
+  medicalContext: string;
+  onMedicalContextChange: (text: string) => void;
+  onSaveMedicalContext: () => void;
+  onClearMedicalContext: () => void;
+  canPersistMedicalContext: boolean;
+  medicalContextStatus: "idle" | "saving" | "saved" | "error";
+  medicalContextError: string | null;
+  medicalContextUpdatedAt: string | null;
+  overMedicalContextLimit: boolean;
+  hasMedicalContextChanges: boolean;
+  maxMedicalContextChars: number;
 }
 
-function ChatInput({ onSend, isStreaming, viewportInfo }: ChatInputProps) {
+function ChatInput({
+  onSend,
+  isStreaming,
+  viewportInfo,
+  medicalContext,
+  onMedicalContextChange,
+  onSaveMedicalContext,
+  onClearMedicalContext,
+  canPersistMedicalContext,
+  medicalContextStatus,
+  medicalContextError,
+  medicalContextUpdatedAt,
+  overMedicalContextLimit,
+  hasMedicalContextChanges,
+  maxMedicalContextChars,
+}: ChatInputProps) {
   const [input, setInput] = useState("");
+  const [contextEditorOpen, setContextEditorOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = useCallback(
@@ -734,8 +858,89 @@ function ChatInput({ onSend, isStreaming, viewportInfo }: ChatInputProps) {
     [],
   );
 
+  const medicalContextCharacterCount = medicalContext.length;
+  const medicalContextIsSaving = medicalContextStatus === "saving";
+  const medicalContextHasValue = medicalContext.trim().length > 0;
+  const canSaveMedicalContext =
+    canPersistMedicalContext &&
+    !medicalContextIsSaving &&
+    hasMedicalContextChanges &&
+    !overMedicalContextLimit;
+  const canClearMedicalContext =
+    !medicalContextIsSaving && (medicalContextHasValue || medicalContextUpdatedAt !== null);
+  const patientContextButtonLabel = contextEditorOpen ? "Hide patient context" : "Patient context";
+
   return (
     <div className="border-t border-border p-2">
+      <div className="mb-2">
+        <button
+          type="button"
+          onClick={() => setContextEditorOpen((prev) => !prev)}
+          className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[10px] uppercase tracking-widest text-muted transition-colors hover:bg-surface hover:text-foreground"
+        >
+          <span>{contextEditorOpen ? "▾" : "▸"}</span>
+          <span>{patientContextButtonLabel}</span>
+        </button>
+      </div>
+      {contextEditorOpen && (
+        <div className="mb-2 rounded-md border border-border bg-surface/70 p-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-[10px] uppercase tracking-widest text-muted">Patient context</p>
+            <span
+              className={`text-[10px] ${overMedicalContextLimit ? "text-red-400" : "text-muted"}`}
+            >
+              {medicalContextCharacterCount}/{maxMedicalContextChars}
+            </span>
+          </div>
+          <textarea
+            value={medicalContext}
+            onChange={(e) => onMedicalContextChange(e.target.value)}
+            placeholder="Optional medical context for this study root (history, symptoms, indication, etc.)"
+            rows={3}
+            className="mb-1 w-full resize-y rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground placeholder:text-muted/60 focus:border-accent/40 focus:outline-none"
+          />
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] text-muted">
+              {!canPersistMedicalContext
+                ? "Persistence is available when this study is opened from a folder root."
+                : medicalContextUpdatedAt
+                ? `Saved locally · ${formatTimestamp(medicalContextUpdatedAt)}`
+                : "Saved locally on this device for the active study root."}
+            </p>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={onClearMedicalContext}
+                disabled={!canClearMedicalContext}
+                className="rounded border border-border px-2 py-0.5 text-[10px] text-muted transition-colors hover:bg-background hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                onClick={onSaveMedicalContext}
+                disabled={!canSaveMedicalContext}
+                className="rounded border border-border-bright px-2 py-0.5 text-[10px] transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {medicalContextIsSaving ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+          {(medicalContextError || medicalContextStatus === "saved" || overMedicalContextLimit) && (
+            <p
+              className={`mt-1 text-[10px] ${
+                medicalContextError || overMedicalContextLimit ? "text-red-400" : "text-emerald-400"
+              }`}
+            >
+              {medicalContextError
+                ? medicalContextError
+                : overMedicalContextLimit
+                ? `Context exceeds ${maxMedicalContextChars} characters.`
+                : "Patient context saved."}
+            </p>
+          )}
+        </div>
+      )}
       <div className="flex items-center gap-1 px-1 pb-1.5 text-[10px] text-muted">
         <svg
           width="12"

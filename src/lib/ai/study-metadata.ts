@@ -4,6 +4,12 @@ export interface StudyMetadata {
   studies: StudySummary[];
   currentViewport: ViewportSummary;
   spatialInfo: SpatialInfo | null;
+  patientContext: PatientContext | null;
+}
+
+interface PatientContext {
+  text: string;
+  updatedAt: string | null;
 }
 
 interface StudySummary {
@@ -118,6 +124,14 @@ export function buildStudyMetadata(state: ViewerState): StudyMetadata {
     };
   }
 
+  const activeRecent = state.fs.recentDirectories.find((entry) => entry.id === state.fs.activeRecentId) ?? null;
+  const patientContext = activeRecent && activeRecent.medicalContext
+    ? {
+        text: activeRecent.medicalContext,
+        updatedAt: activeRecent.medicalContextUpdatedAt ?? null,
+      }
+    : null;
+
   return {
     studies,
     currentViewport: {
@@ -132,6 +146,7 @@ export function buildStudyMetadata(state: ViewerState): StudyMetadata {
       compareSliceIndex: compare.currentIndex,
     },
     spatialInfo,
+    patientContext,
   };
 }
 

@@ -7,6 +7,8 @@ export interface RecentDirectoryEntry {
   createdAt: string;
   lastUsedAt: string;
   status: RecentDirectoryStatus;
+  medicalContext?: string;
+  medicalContextUpdatedAt?: string | null;
 }
 
 const DB_NAME = "openrad-persistence";
@@ -98,6 +100,26 @@ export async function markRecentDirectoryStatus(
   };
 
   await runTransaction("readwrite", (store) => store.put(updated));
+}
+
+export async function updateRecentMedicalContext(id: string, medicalContext: string): Promise<void> {
+  const entry = await runTransaction<RecentDirectoryEntry | undefined>("readonly", (store) => store.get(id));
+  if (!entry) return;
+
+  const trimmedContext = medicalContext.trim();
+  const hasContext = trimmedContext.length > 0;
+
+  const updated: RecentDirectoryEntry = {
+    ...entry,
+    medicalContext: hasContext ? trimmedContext : undefined,
+    medicalContextUpdatedAt: hasContext ? new Date().toISOString() : null,
+  };
+
+  await runTransaction("readwrite", (store) => store.put(updated));
+}
+
+export async function clearRecentMedicalContext(id: string): Promise<void> {
+  await updateRecentMedicalContext(id, "");
 }
 
 export async function findMatchingRecent(

@@ -7,12 +7,14 @@ import { parseDicomdirFromFiles } from "@/lib/dicom/parse-dicomdir";
 import { parseFilesWithoutDicomdir } from "@/lib/dicom/parse-files";
 import { findNearestSliceByPosition, mapByRelativeIndex } from "@/lib/dicom/slice-sync";
 import {
+  clearRecentMedicalContext,
   findMatchingRecent,
   listRecentDirectories,
   markRecentDirectoryStatus,
   removeRecentDirectory,
   saveRecentDirectory,
   touchRecentDirectory,
+  updateRecentMedicalContext,
   type RecentDirectoryEntry,
 } from "@/lib/filesystem/persistent-directories";
 import {
@@ -460,6 +462,28 @@ export class ViewerSessionController {
       id: state.fs.reconnectTargetId === id ? null : state.fs.reconnectTargetId,
     });
     await this.refreshRecentDirectories();
+  }
+
+  async saveActiveRecentMedicalContext(text: string): Promise<boolean> {
+    const activeRecentId = this.store.getSnapshot().fs.activeRecentId;
+    if (!activeRecentId) {
+      return false;
+    }
+
+    await updateRecentMedicalContext(activeRecentId, text);
+    await this.refreshRecentDirectories();
+    return true;
+  }
+
+  async clearActiveRecentMedicalContext(): Promise<boolean> {
+    const activeRecentId = this.store.getSnapshot().fs.activeRecentId;
+    if (!activeRecentId) {
+      return false;
+    }
+
+    await clearRecentMedicalContext(activeRecentId);
+    await this.refreshRecentDirectories();
+    return true;
   }
 
   private async refreshRecentDirectories(): Promise<void> {

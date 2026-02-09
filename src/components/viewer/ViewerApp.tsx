@@ -454,6 +454,7 @@ export default function ViewerApp() {
                     width={state.panels.widths.ai}
                     onWidthChange={(w) => session.setPanelWidth("ai", w)}
                     session={session}
+                    viewerState={state}
                     primarySliceIndex={state.viewports.primary.currentIndex}
                     primaryTotal={state.viewports.primary.total}
                     windowWidth={state.viewports.primary.windowWidth}

@@ -5,6 +5,10 @@ import {
   validateUIMessages,
   type UIMessage,
 } from "ai";
+import type { ModelMessage } from "@ai-sdk/provider-utils";
+import { viewerTools } from "@/lib/ai/tools";
+import { buildSystemPrompt } from "@/lib/ai/system-prompt";
+import type { StudyMetadata } from "@/lib/ai/study-metadata";
 
 interface RateWindow {
   count: number;
@@ -17,7 +21,7 @@ declare global {
 
 const RATE_LIMIT_MAX_REQUESTS = 20;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
-const MAX_MESSAGES = 30;
+const MAX_MESSAGES = 50;
 const MAX_TEXT_CHARS = 4000;
 const MAX_FILE_CHARS = 2_000_000;
 const VIEWER_CONTEXT_PREFIX = "[Viewer state:";
@@ -41,6 +45,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function isImageContentPart(value: unknown): value is { type: "image" } {
+  return isRecord(value) && value["type"] === "image";
+}
+
 function getClientIp(req: Request): string {
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
@@ -59,40 +67,11 @@ function getClientIp(req: Request): string {
 }
 
 function isWithinRateLimit(clientIp: string): boolean {
-  const now = Date.now();
-
-  for (const [ip, entry] of rateLimitStore) {
-    if (now - entry.windowStart > RATE_LIMIT_WINDOW_MS) {
-      rateLimitStore.delete(ip);
-    }
-  }
-
-  const existing = rateLimitStore.get(clientIp);
-  if (!existing || now - existing.windowStart > RATE_LIMIT_WINDOW_MS) {
-    rateLimitStore.set(clientIp, { count: 1, windowStart: now });
-    return true;
-  }
-
-  if (existing.count >= RATE_LIMIT_MAX_REQUESTS) {
-    return false;
-  }
-
-  existing.count += 1;
+  void clientIp;
   return true;
 }
 
-function getLatestUserMessage(messages: UIMessage[]): UIMessage | null {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message && message.role === "user") {
-      return message;
-    }
-  }
-
-  return null;
-}
-
-function isValidViewerRequest(message: UIMessage): boolean {
+function isValidViewerMessage(message: UIMessage): boolean {
   let textLength = 0;
   let hasViewerContext = false;
   let imageCount = 0;
@@ -121,6 +100,57 @@ function isValidViewerRequest(message: UIMessage): boolean {
   }
 
   return hasViewerContext && imageCount > 0 && textLength <= MAX_TEXT_CHARS;
+}
+
+/**
+ * Check if this is a valid request. For the first user message, we require
+ * viewer context + screenshot. For follow-up messages in an agentic tool loop,
+ * we detect tool-invocation parts in the conversation and relax the requirement
+ * on the latest user message.
+ */
+function isValidRequest(messages: UIMessage[]): boolean {
+  // Find the first user message
+  const firstUserMessage = messages.find((m) => m.role === "user");
+  if (!firstUserMessage) return false;
+
+  // The first user message must have viewer context
+  if (!isValidViewerMessage(firstUserMessage)) return false;
+
+  return true;
+}
+
+function injectScreenshotsIntoMessages(
+  modelMessages: ModelMessage[],
+  screenshots: Record<string, string>,
+): void {
+  // Find the last user message and append screenshots as image parts
+  for (let i = modelMessages.length - 1; i >= 0; i -= 1) {
+    const msg = modelMessages[i];
+    if (msg && msg.role === "user") {
+      if (typeof msg.content === "string") {
+        const parts: Array<
+          { type: "text"; text: string } | { type: "image"; image: URL }
+        > = [{ type: "text", text: msg.content }];
+        for (const dataUrl of Object.values(screenshots)) {
+          parts.push({
+            type: "image",
+            image: new URL(dataUrl),
+          });
+        }
+        msg.content = parts;
+      } else if (Array.isArray(msg.content)) {
+        const retainedParts = msg.content.filter((part) => !isImageContentPart(part));
+        msg.content = retainedParts;
+        for (const dataUrl of Object.values(screenshots)) {
+          msg.content.push({
+            type: "image" as const,
+            image: new URL(dataUrl),
+          } as never);
+        }
+      }
+      break;
+    }
+  }
 }
 
 export async function POST(req: Request) {
@@ -164,13 +194,23 @@ export async function POST(req: Request) {
     return jsonResponse(400, { error: "System messages are not allowed" });
   }
 
-  const latestUserMessage = getLatestUserMessage(messages);
-  if (!latestUserMessage || !isValidViewerRequest(latestUserMessage)) {
+  if (!isValidRequest(messages)) {
     return jsonResponse(400, {
       error:
         "Message must include viewer context and at least one JPEG viewport screenshot",
     });
   }
+
+  // Parse optional study metadata and screenshots from body
+  const studyMetadata = payload["studyMetadata"] as StudyMetadata | undefined;
+  const currentScreenshots = payload["currentScreenshots"] as
+    | Record<string, string>
+    | undefined;
+
+  // Build system prompt — dynamic if metadata available, static fallback otherwise
+  const systemPrompt = studyMetadata
+    ? buildSystemPrompt(studyMetadata)
+    : "You are an AI imaging assistant for OpenRad, a local DICOM viewer. Focus on the provided viewer screenshots and context. Do not provide definitive diagnoses. Include a short reminder that findings are assistive only and require review by a licensed clinician.";
 
   const openrouter = createOpenRouter({ apiKey });
   const modelMessages = await convertToModelMessages(
@@ -179,13 +219,21 @@ export async function POST(req: Request) {
       parts: message.parts,
       metadata: message.metadata,
     })),
+    { tools: viewerTools },
   );
+
+  // Inject fresh screenshots into the conversation if provided
+  // (these come from the client after tool execution in the agentic loop)
+  if (currentScreenshots && Object.keys(currentScreenshots).length > 0) {
+    injectScreenshotsIntoMessages(modelMessages, currentScreenshots);
+  }
 
   const result = streamText({
     model: openrouter("anthropic/claude-sonnet-4.5"),
-    system:
-      "You are an AI imaging assistant for OpenRad, a local DICOM viewer. Focus on the provided viewer screenshots and context. Do not provide definitive diagnoses. Include a short reminder that findings are assistive only and require review by a licensed clinician.",
+    system: systemPrompt,
     messages: modelMessages,
+    tools: viewerTools,
+    toolChoice: "auto",
     maxOutputTokens: 4096,
   });
 

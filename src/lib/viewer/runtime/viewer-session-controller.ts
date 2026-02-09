@@ -200,6 +200,10 @@ export class ViewerSessionController {
   }
 
   async setViewportSeries(viewportId: RuntimeViewportId, seriesUID: string | null): Promise<void> {
+    if (viewportId === "compare") {
+      this.resetCompareSyncTracking();
+    }
+
     this.store.dispatch({ type: "viewport/setSeries", viewportId, seriesUID });
     const series = this.findSeriesByUID(seriesUID);
     await this.runtime.setSeries(viewportId, series);
@@ -266,12 +270,14 @@ export class ViewerSessionController {
   }
 
   selectActiveSeries(seriesUID: string | null): void {
+    this.resetCompareSyncTracking();
     this.store.dispatch({ type: "series/setActive", seriesUID });
     void this.setViewportSeries("primary", seriesUID);
     void this.setViewportSeries("compare", null);
   }
 
   selectCompareSeries(seriesUID: string | null): void {
+    this.resetCompareSyncTracking();
     this.store.dispatch({ type: "series/setCompare", seriesUID });
     void this.setViewportSeries("compare", seriesUID);
 
@@ -353,6 +359,7 @@ export class ViewerSessionController {
   }
 
   openNew(): void {
+    this.resetCompareSyncTracking();
     clearFiles(this.sessionId);
     clearImageMetadataForSession(this.sessionId);
     this.store.dispatch({ type: "viewer/reset" });
@@ -641,19 +648,29 @@ export class ViewerSessionController {
   }
 
   private handleCompareUserScroll(currentIndex: number): void {
+    const state = this.store.getSnapshot();
+    const compareActive = state.panels.open.has("compare") && state.compareSeriesUID !== null;
+    if (!compareActive) {
+      return;
+    }
+
     if (this.lastSyncedCompareIndex == null) return;
 
     const newOffset = currentIndex - this.lastSyncedCompareIndex +
-      this.store.getSnapshot().compareOffset;
+      state.compareOffset;
 
     this.store.dispatch({ type: "compare/setOffset", offset: newOffset });
     this.lastSyncedCompareIndex = currentIndex;
 
     // Persist to localStorage
-    const state = this.store.getSnapshot();
     if (state.activeSeriesUID && state.compareSeriesUID) {
       saveCompareOffset(state.activeSeriesUID, state.compareSeriesUID, newOffset);
     }
+  }
+
+  private resetCompareSyncTracking(): void {
+    this.syncingCompare = false;
+    this.lastSyncedCompareIndex = null;
   }
 }
 

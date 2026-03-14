@@ -135,6 +135,12 @@ export class ViewerSessionController {
           viewportId,
           positions,
         });
+
+        if (viewportId === "compare") {
+          const state = this.store.getSnapshot();
+          const primary = state.viewports.primary;
+          this.syncPrimaryToCompare(primary.currentIndex, primary.total, primary.position);
+        }
       },
     });
   }
@@ -188,15 +194,35 @@ export class ViewerSessionController {
   async registerViewportMount(viewportId: RuntimeViewportId, element: HTMLDivElement): Promise<void> {
     await this.runtime.registerViewport(viewportId, element);
     const state = this.store.getSnapshot();
-    const uid = state.viewports[viewportId].seriesInstanceUID;
+    const viewport = state.viewports[viewportId];
+    const uid = viewport.seriesInstanceUID;
+    const preservedIndex = viewport.currentIndex;
     const series = this.findSeriesByUID(uid);
-    await this.runtime.setSeries(viewportId, series);
+    if (viewportId === "compare") {
+      this.resetCompareSyncTracking();
+      this.syncingCompare = true;
+    }
+    try {
+      await this.runtime.setSeries(viewportId, series);
+      if (series && preservedIndex > 0 && preservedIndex < series.instances.length) {
+        await this.runtime.jumpToSlice(viewportId, preservedIndex);
+      }
+    } finally {
+      if (viewportId === "compare") {
+        this.syncingCompare = false;
+      }
+    }
 
     if (viewportId === "compare") {
-      const primary = state.viewports.primary;
+      const current = this.store.getSnapshot();
+      const primary = current.viewports.primary;
       if (primary.windowWidth > 0) {
         this.runtime.setWindow("compare", primary.windowWidth, primary.windowCenter);
       }
+
+      // Immediately align Prior to the current slice without waiting for
+      // the next primary scroll event.
+      this.syncPrimaryToCompare(primary.currentIndex, primary.total, primary.position);
     }
   }
 
@@ -207,11 +233,18 @@ export class ViewerSessionController {
   async setViewportSeries(viewportId: RuntimeViewportId, seriesUID: string | null): Promise<void> {
     if (viewportId === "compare") {
       this.resetCompareSyncTracking();
+      this.syncingCompare = true;
     }
 
     this.store.dispatch({ type: "viewport/setSeries", viewportId, seriesUID });
     const series = this.findSeriesByUID(seriesUID);
-    await this.runtime.setSeries(viewportId, series);
+    try {
+      await this.runtime.setSeries(viewportId, series);
+    } finally {
+      if (viewportId === "compare") {
+        this.syncingCompare = false;
+      }
+    }
   }
 
   setTool(tool: ViewerToolName): void {

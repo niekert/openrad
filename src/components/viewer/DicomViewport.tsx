@@ -19,6 +19,7 @@ export default function DicomViewport({
   jumpToSliceIndex,
 }: DicomViewportProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const didRunInitialSeriesSync = useRef(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -46,6 +47,11 @@ export default function DicomViewport({
   }, [session, viewportId]);
 
   useEffect(() => {
+    if (!didRunInitialSeriesSync.current) {
+      didRunInitialSeriesSync.current = true;
+      return;
+    }
+
     void session.setViewportSeries(viewportId, series.seriesInstanceUID);
   }, [session, viewportId, series.seriesInstanceUID]);
 
